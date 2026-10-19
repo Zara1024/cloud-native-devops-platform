@@ -1,89 +1,167 @@
-﻿# DevOps Overview 涓€閿儴缃插疄鎴樹笌韪╁潙鍏ㄧ邯褰曟寚鍗?
-> **鏂囨。閫傜敤璺緞**锛歚iac/week-1/devops-overview`  
-> **鐩爣**锛氫娇鐢?Terraform 鍦ㄥ叕鏈変簯锛堣吘璁簯 + Cloudflare锛変笂鍏ㄨ嚜鍔ㄥ寲鎷夎捣楂樺彲鐢?K3s 闆嗙兢銆佺嫭绔?PostgreSQL 鏁版嵁搴擄紝骞朵竴閿儴缃叉墦閫氫紒涓氱骇 DevOps 鍏ㄩ摼璺伐鍏锋爤锛圙itLab銆丠arbor銆丣enkins銆丼onarQube銆丄rgo CD銆丳rometheus銆丟rafana銆丆osign 绛夛級銆?
+# DevOps Overview 一键部署实战与踩坑全纪录指南
+
+> **文档适用路径**：`iac/week-1/devops-overview`  
+> **目标**：使用 Terraform 在公有云（腾讯云 + Cloudflare）上全自动化拉起高可用 K3s 集群、独立 PostgreSQL 数据库，并一键部署打通企业级 DevOps 全链路工具栈（GitLab、Harbor、Jenkins、SonarQube、Argo CD、Prometheus、Grafana、Cosign 等）。
+
 ---
 
-## 涓€銆佹灦鏋勮璁′笌鐜鍑嗗
+## 一、架构设计与环境准备
 
-### 1.1 鏋舵瀯璁捐鍥?鏁翠釜 IaC 鑷姩鍖栨灦鏋勪富瑕佸寘鍚袱澶ч儴鍒嗭細**浜戝熀纭€璁炬柦灞?* 涓?**Kubernetes DevOps 骞冲彴灞?*銆?
+### 1.1 架构设计图
+整个 IaC 自动化架构主要包含两大部分：**云基础设施层** 与 **Kubernetes DevOps 平台层**。
+
 ```
-                              鈹屸攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹?                              鈹?      Cloudflare DNS 瑙ｆ瀽绠＄悊              鈹?                              鈹? (*.devops.example.com -> CVM)  鈹?                              鈹斺攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹?                                                    鈹?                                                    鈻?鈹屸攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹?鈹?鑵捐浜戦娓湴鍩?(ap-hongkong-2)                                                          鈹?鈹?                                                                                       鈹?鈹?  鈹屸攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹?  鈹屸攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹? 鈹?鈹?  鈹?VPC: tf-vpc (10.0.0.0/16)               鈹?  鈹?VPC: tf-pg-vpc (10.0.0.0/16)      鈹? 鈹?鈹?  鈹?Subnet: tf_subnet (10.0.1.0/24)         鈹?  鈹?Subnet: tf_subnet (10.0.1.0/24)   鈹? 鈹?鈹?  鈹?                                        鈹?  鈹?                                  鈹? 鈹?鈹?  鈹? 鈹屸攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹? 鈹?  鈹? 鈹屸攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹? 鈹? 鈹?鈹?  鈹? 鈹?CVM: terraform-cvm-k8s-0          鈹? 鈹?  鈹? 鈹?CVM: terraform-cvm-pg-0     鈹? 鈹? 鈹?鈹?  鈹? 鈹?瑙勬牸: S6.4XLARGE32 (16C 32G)       鈹? 鈹?  鈹? 鈹?瑙勬牸: S5.MEDIUM2 (2C 2G)    鈹? 鈹? 鈹?鈹?  鈹? 鈹?璁¤垂: 绔炰环瀹炰緥 (SPOTPAID)         鈹? 鈹?  鈹? 鈹?璁¤垂: 绔炰环瀹炰緥 (SPOTPAID)   鈹? 鈹? 鈹?鈹?  鈹? 鈹?鎿嶄綔绯荤粺: Ubuntu 22.04 LTS        鈹? 鈹?  鈹? 鈹?鎿嶄綔绯荤粺: Ubuntu 22.04 LTS  鈹? 鈹? 鈹?鈹?  鈹? 鈹?                                  鈹? 鈹?  鈹? 鈹?                            鈹? 鈹? 鈹?鈹?  鈹? 鈹?鈹屸攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹?鈹? 鈹?  鈹? 鈹?鈹屸攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹?鈹? 鈹? 鈹?鈹?  鈹? 鈹?鈹?K3s Kubernetes (楂樺彲鐢ㄦā寮?   鈹?鈹? 鈹?  鈹? 鈹?鈹?Docker Compose          鈹?鈹? 鈹? 鈹?鈹?  鈹? 鈹?鈹? - GitLab CE (甯?Shell 2222) 鈹?鈹? 鈹?  鈹? 鈹?鈹? 鈹斺攢 PostgreSQL 14.2     鈹?鈹? 鈹? 鈹?鈹?  鈹? 鈹?鈹? - Harbor 浼佷笟闀滃儚浠撳簱        鈹?鈹傗梽鈹€鈹尖攢鈹€鈹€鈹尖攢鈹€鈹尖攢鈹尖攢  (K3s 鍚庣瀛樺偍 & 涓氬姟)  鈹?鈹? 鈹?鈹?  鈹? 鈹?鈹? - Jenkins 鑷姩鍖栨祦姘寸嚎       鈹?鈹? 鈹?  鈹? 鈹?鈹斺攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹?鈹? 鈹? 鈹?鈹?  鈹? 鈹?鈹? - SonarQube 浠ｇ爜璐ㄩ噺闂ㄧ     鈹?鈹? 鈹?  鈹? 鈹斺攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹? 鈹? 鈹?鈹?  鈹? 鈹?鈹? - Argo CD & Image Updater   鈹?鈹? 鈹?  鈹? Security Group: web-sg (22, 5432)鈹? 鈹?鈹?  鈹? 鈹?鈹? - Prometheus & Grafana & Loki鈹?鈹? 鈹?  鈹斺攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹? 鈹?鈹?  鈹? 鈹?鈹斺攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹?鈹? 鈹?                                         鈹?鈹?  鈹? 鈹斺攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹? 鈹?                                         鈹?鈹?  鈹? Security Group: web-sg (80,443,6443,   鈹?                                         鈹?鈹?  鈹?                         22,2222,ICMP)  鈹?                                         鈹?鈹?  鈹斺攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹?                                         鈹?鈹斺攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹?```
+                              ┌───────────────────────────────────────────┐
+                              │       Cloudflare DNS 解析管理              │
+                              │  (*.devops.example.com -> CVM)  │
+                              └─────────────────────┬─────────────────────┘
+                                                    │
+                                                    ▼
+┌────────────────────────────────────────────────────────────────────────────────────────┐
+│ 腾讯云香港地域 (ap-hongkong-2)                                                          │
+│                                                                                        │
+│   ┌─────────────────────────────────────────┐   ┌───────────────────────────────────┐  │
+│   │ VPC: tf-vpc (10.0.0.0/16)               │   │ VPC: tf-pg-vpc (10.0.0.0/16)      │  │
+│   │ Subnet: tf_subnet (10.0.1.0/24)         │   │ Subnet: tf_subnet (10.0.1.0/24)   │  │
+│   │                                         │   │                                   │  │
+│   │  ┌───────────────────────────────────┐  │   │  ┌─────────────────────────────┐  │  │
+│   │  │ CVM: terraform-cvm-k8s-0          │  │   │  │ CVM: terraform-cvm-pg-0     │  │  │
+│   │  │ 规格: S6.4XLARGE32 (16C 32G)       │  │   │  │ 规格: S5.MEDIUM2 (2C 2G)    │  │  │
+│   │  │ 计费: 竞价实例 (SPOTPAID)         │  │   │  │ 计费: 竞价实例 (SPOTPAID)   │  │  │
+│   │  │ 操作系统: Ubuntu 22.04 LTS        │  │   │  │ 操作系统: Ubuntu 22.04 LTS  │  │  │
+│   │  │                                   │  │   │  │                             │  │  │
+│   │  │ ┌───────────────────────────────┐ │  │   │  │ ┌─────────────────────────┐ │  │  │
+│   │  │ │ K3s Kubernetes (高可用模式)   │ │  │   │  │ │ Docker Compose          │ │  │  │
+│   │  │ │  - GitLab CE (带 Shell 2222) │ │  │   │  │ │  └─ PostgreSQL 14.2     │ │  │  │
+│   │  │ │  - Harbor 企业镜像仓库        │ │◄─┼───┼──┼─┼─  (K3s 后端存储 & 业务)  │ │  │
+│   │  │ │  - Jenkins 自动化流水线       │ │  │   │  │ └─────────────────────────┘ │  │  │
+│   │  │ │  - SonarQube 代码质量门禁     │ │  │   │  └─────────────────────────────┘  │  │
+│   │  │ │  - Argo CD & Image Updater   │ │  │   │  Security Group: web-sg (22, 5432)│  │
+│   │  │ │  - Prometheus & Grafana & Loki│ │  │   └───────────────────────────────────┘  │
+│   │  │ └───────────────────────────────┘ │  │                                          │
+│   │  └───────────────────────────────────┘  │                                          │
+│   │  Security Group: web-sg (80,443,6443,   │                                          │
+│   │                          22,2222,ICMP)  │                                          │
+│   └─────────────────────────────────────────┘                                          │
+└────────────────────────────────────────────────────────────────────────────────────────┘
+```
 
-### 1.2 鍓嶇疆渚濊禆鍑嗗
-1. **Terraform CLI**锛?   - 寤鸿鐗堟湰锛歚v1.5.0+`锛堟湰椤圭洰杩愯鐜涓?`v1.15.7` on `windows_amd64`锛夈€?   - 楠岃瘉鍛戒护锛歚terraform version`銆?2. **鑵捐浜戣处鍙峰嚟璇?*锛?   - `SecretId` 涓?`SecretKey`锛堥渶鍏峰 CVM銆乂PC銆佸畨鍏ㄧ粍绛変簯璧勬簮鐨勫垱寤轰笌绠＄悊鏉冮檺锛夈€?3. **Cloudflare 璐﹀彿涓庡煙鍚?*锛?   - 宸叉墭绠′簬 Cloudflare 鐨勪富鍩熷悕锛堝 `example.com`锛夈€?   - 鍏峰 `Zone.DNS` 璇诲啓鏉冮檺鐨?Cloudflare API Token銆?
+### 1.2 前置依赖准备
+1. **Terraform CLI**：
+   - 建议版本：`v1.5.0+`（本项目运行环境为 `v1.15.7` on `windows_amd64`）。
+   - 验证命令：`terraform version`。
+2. **腾讯云账号凭证**：
+   - `SecretId` 与 `SecretKey`（需具备 CVM、VPC、安全组等云资源的创建与管理权限）。
+3. **Cloudflare 账号与域名**：
+   - 已托管于 Cloudflare 的主域名（如 `example.com`）。
+   - 具备 `Zone.DNS` 读写权限的 Cloudflare API Token。
+
 ---
 
-## 浜屻€侀儴缃插疄鎴樻楠?
-### 2.1 姝ラ 1锛氬噯澶囧彉閲忛厤缃枃浠?`terraform.tfvars`
-鍦?`iac/week-1/devops-overview` 鐩綍涓嬪垱寤?`terraform.tfvars` 鏂囦欢锛岄泦涓淮鎶ゆ晱鎰熷嚟鎹拰鍩熷悕鍙傛暟锛岄伩鍏嶅湪鍛戒护琛屼腑娉勯湶鏄庢枃锛?
+## 二、部署实战步骤
+
+### 2.1 步骤 1：准备变量配置文件 `terraform.tfvars`
+在 `iac/week-1/devops-overview` 目录下创建 `terraform.tfvars` 文件，集中维护敏感凭据和域名参数，避免在命令行中泄露明文：
+
 ```hcl
-# 鑵捐浜?API 璁块棶鍑嵁
+# 腾讯云 API 访问凭据
 secret_id  = "YOUR_TENCENTCLOUD_SECRET_ID"
 secret_key = "YOUR_TENCENTCLOUD_SECRET_KEY"
 
-# Cloudflare API Token 涓庡煙鍚?cloudflare_api_key = "YOUR_CLOUDFLARE_API_KEY"
+# Cloudflare API Token 与域名
+cloudflare_api_key = "YOUR_CLOUDFLARE_API_KEY"
 domain             = "example.com"
 prefix             = "devops"
 
-# 鍙€夛細鍦板煙涓庡彲鐢ㄥ尯閰嶇疆锛堥粯璁?ap-hongkong / ap-hongkong-2锛?region            = "ap-hongkong"
+# 可选：地域与可用区配置（默认 ap-hongkong / ap-hongkong-2）
+region            = "ap-hongkong"
 availability_zone = "ap-hongkong-2"
 
-# 璁¤垂绫诲瀷锛歋POTPAID锛堢珵浠峰疄渚嬶紝楂樻€т环姣旓級锛岃嫢棰濆害涓嶈冻鍙垏鎹负 POSTPAID_BY_HOUR
+# 计费类型：SPOTPAID（竞价实例，高性价比），若额度不足可切换为 POSTPAID_BY_HOUR
 instance_charge_type = "SPOTPAID"
 ```
 
-### 2.2 姝ラ 2锛氬垵濮嬪寲宸ヤ綔鍖?(`terraform init`)
-鎵ц宸ヤ綔鍖哄垵濮嬪寲锛屼笅杞藉苟閿佸畾鎵€闇€ Provider 鎻掍欢锛?
+### 2.2 步骤 2：初始化工作区 (`terraform init`)
+执行工作区初始化，下载并锁定所需 Provider 插件：
+
 ```bash
 terraform init
 ```
-**杈撳嚭璇存槑**锛?- `tencentcloudstack/tencentcloud`: 鑵捐浜戝熀纭€璁炬柦 Provider锛坄v1.81.5`锛夈€?- `cloudflare/cloudflare`: Cloudflare DNS 瑙ｆ瀽 Provider锛坄~> 4.0`锛夈€?- `hashicorp/null`: 鐢ㄤ簬鎵ц SSH 杩滅▼ Provisioner 鑴氭湰鐨?Null Provider銆?
-### 2.3 姝ラ 3锛氳娉曟牎楠屼笌鎵ц璁″垝瀹℃煡 (`terraform plan`)
-杩愯鏍￠獙涓庤鍒掗妫€锛?
-```bash
-# 璇硶妫€鏌?terraform validate
+**输出说明**：
+- `tencentcloudstack/tencentcloud`: 腾讯云基础设施 Provider（`v1.81.5`）。
+- `cloudflare/cloudflare`: Cloudflare DNS 解析 Provider（`~> 4.0`）。
+- `hashicorp/null`: 用于执行 SSH 远程 Provisioner 脚本的 Null Provider。
 
-# 鐢熸垚骞跺鏌ユ墽琛岃鍒?terraform plan
+### 2.3 步骤 3：语法校验与执行计划审查 (`terraform plan`)
+运行校验与计划预检：
+
+```bash
+# 语法检查
+terraform validate
+
+# 生成并审查执行计划
+terraform plan
 ```
-璁″垝涓簲鍖呭惈 **29 涓緟鍒涘缓璧勬簮**锛堟垨鍘婚櫎宸插缓瀹夊叏缁勮鍒欏悗鐨勫緟鍒涘缓椤癸級锛屽寘鎷?2 濂楃嫭绔嬬殑 VPC銆佸瓙缃戙€佽矾鐢辫〃銆佸畨鍏ㄧ粍瑙勫垯銆? 鍙?CVM 瀹炰緥銆? 鏉?Cloudflare A 璁板綍浠ュ強 2 涓?SSH Remote-Exec 鍒濆鍖栦换鍔°€?
-### 2.4 姝ラ 4锛氳嚜鍔ㄥ寲閮ㄧ讲鎵ц (`terraform apply`)
-涓€閿墽琛屽畬鏁撮儴缃叉祦绋嬶細
+计划中应包含 **29 个待创建资源**（或去除已建安全组规则后的待创建项），包括 2 套独立的 VPC、子网、路由表、安全组规则、2 台 CVM 实例、7 条 Cloudflare A 记录以及 2 个 SSH Remote-Exec 初始化任务。
+
+### 2.4 步骤 4：自动化部署执行 (`terraform apply`)
+一键执行完整部署流程：
 
 ```bash
 terraform apply -auto-approve
 ```
 
-鏁翠釜鎵ц杩囩▼閫氬父鎸佺画 10~15 鍒嗛挓锛屾墽琛屾祦绋嬬粏鍒嗕负锛?1. **缃戠粶灞傚垱寤?*锛氬苟鍙戝垱寤?`tf-vpc`銆乣tf-pg-vpc` 鍙婂叾 Subnet銆丷oute Table銆丼ecurity Group锛?2. **璁＄畻灞傛媺璧?*锛氬苟鍙戠敵璇?`terraform-cvm-k8s-0`锛?6C 32G锛変笌 `terraform-cvm-pg-0`锛?C 2G锛夊疄渚嬪苟鑾峰彇鍏綉 IP锛?3. **DNS 瑙ｆ瀽閰嶇疆**锛氳嚜鍔ㄥ湪 Cloudflare 鍐欏叆鍚勫瓙鍩熷悕鐨?A 璁板綍瑙ｆ瀽鎸囧悜 K8s 鑺傜偣鍏綉 IP锛?4. **PostgreSQL 鑺傜偣 Provision**锛歋SH 鐧诲綍 PG 鑺傜偣锛屽畨瑁?Docker 骞堕€氳繃 Docker Compose 鍚姩 Postgres 14 瀹瑰櫒锛岄厤缃仴搴锋鏌ワ紱
-5. **K3s 鑺傜偣 Provision**锛氬畨瑁?yq銆乭elm銆乸ostgresql-client 绛夊熀纭€ CLI锛岀瓑寰?PG 鏁版嵁搴撳彲杈撅紝鎷夎捣楂樺彲鐢?K3s 闆嗙兢锛屽苟渚濇閮ㄧ讲锛?   - Loki & Prometheus & Grafana 鐩戞帶鏍堬紱
-   - GitLab CE 瀹炰緥锛屽苟閰嶇疆 Cloudflare 鑷姩 SSL 璇佷功锛?   - 鑷姩鐢熸垚 GitLab PAT 骞跺垱寤虹ず鑼冮」鐩?`camp-go-example` 鍜?Helm Chart 浠撳簱锛?   - Harbor 绉佹湁闀滃儚浠撳簱銆侀厤缃?Cosign 绛惧悕鏍￠獙锛?   - SonarQube 浠ｇ爜瀹℃煡鏈嶅姟锛岀敓鎴?Token 骞堕厤缃?Webhook锛?   - Jenkins 鏈嶅姟鍙婄浉鍏?Kubernetes Secret銆丣CasC 娴佹按绾块厤缃紱
-   - Argo CD 鍙婂叾 Image Updater 鑷姩鍚屾鐩戝惉 Harbor銆?
+整个执行过程通常持续 10~15 分钟，执行流程细分为：
+1. **网络层创建**：并发创建 `tf-vpc`、`tf-pg-vpc` 及其 Subnet、Route Table、Security Group；
+2. **计算层拉起**：并发申请 `terraform-cvm-k8s-0`（16C 32G）与 `terraform-cvm-pg-0`（2C 2G）实例并获取公网 IP；
+3. **DNS 解析配置**：自动在 Cloudflare 写入各子域名的 A 记录解析指向 K8s 节点公网 IP；
+4. **PostgreSQL 节点 Provision**：SSH 登录 PG 节点，安装 Docker 并通过 Docker Compose 启动 Postgres 14 容器，配置健康检查；
+5. **K3s 节点 Provision**：安装 yq、helm、postgresql-client 等基础 CLI，等待 PG 数据库可达，拉起高可用 K3s 集群，并依次部署：
+   - Loki & Prometheus & Grafana 监控栈；
+   - GitLab CE 实例，并配置 Cloudflare 自动 SSL 证书；
+   - 自动生成 GitLab PAT 并创建示范项目 `camp-go-example` 和 Helm Chart 仓库；
+   - Harbor 私有镜像仓库、配置 Cosign 签名校验；
+   - SonarQube 代码审查服务，生成 Token 并配置 Webhook；
+   - Jenkins 服务及相关 Kubernetes Secret、JCasC 流水线配置；
+   - Argo CD 及其 Image Updater 自动同步监听 Harbor。
+
 ---
 
-## 涓夈€侀儴缃查亣鍒扮殑鏍稿績闂涓庢牴鍥犳帓鏌ュ叏璁板綍
+## 三、部署遇到的核心问题与根因排查全记录
 
-鍦ㄨ窇閫氬師宸ョ▼鐨勮繃绋嬩腑锛屽叡瀹氫綅鍑?**14 椤逛弗閲嶅奖鍝嶉儴缃茬殑鑷村懡缂洪櫡涓庨樆鏂€?Bug**锛屽叿浣撴帓鏌ヨ繃绋嬩笌淇鏂规濡備笅锛?
+在跑通原工程的过程中，共定位出 **14 项严重影响部署的致命缺陷与阻断性 Bug**，具体排查过程与修复方案如下：
+
 ---
 
-### 闂涓€锛欳loudflare 鍩熷悕 Zone 鏈壘鍒?(`Error: no zone found`)
+### 问题一：Cloudflare 域名 Zone 未找到 (`Error: no zone found`)
 
-- **鐜拌薄**锛氭墽琛?`terraform plan` 鏃讹紝鎺у埗鍙版姏鍑烘姤閿欙細
+- **现象**：执行 `terraform plan` 时，控制台抛出报错：
   ```text
   Error: no zone found
     with data.cloudflare_zone.this,
     on cloudflare.tf line 5, in data "cloudflare_zone" "this":
      5: data "cloudflare_zone" "this" {
   ```
-- **鎺掓煡杩囩▼**锛?  1. 妫€鏌?`cloudflare.tf`锛屽彂鐜版暟鎹簮閫氳繃 `name = var.domain` 鏌ヨ鐩爣鍩熷悕鐨?Zone ID銆?  2. 鏌ョ湅 `variables.tf`锛宍domain` 榛樿鍊肩‖缂栫爜涓哄師璇剧▼浣滆€呯殑 `gkdevopscamp.com`銆?  3. 浣跨敤鐢ㄦ埛鎻愪緵鐨?API Token 璋冪敤 Cloudflare REST API 鏌ヨ鍏惰处鍙蜂笅瀹為檯鎵樼鐨勫煙鍚嶏細
+- **排查过程**：
+  1. 检查 `cloudflare.tf`，发现数据源通过 `name = var.domain` 查询目标域名的 Zone ID。
+  2. 查看 `variables.tf`，`domain` 默认值硬编码为原课程作者的 `gkdevopscamp.com`。
+  3. 使用用户提供的 API Token 调用 Cloudflare REST API 查询其账号下实际托管的域名：
      ```bash
      curl.exe -s -X GET "https://api.cloudflare.com/client/v4/zones" \
        -H "Authorization: Bearer <API_TOKEN>"
      ```
-     杩斿洖缁撴灉鏄剧ず璇?Token 鎵€灞炵敤鎴疯处鍙蜂负 `user@example.com`锛屽疄闄呮墭绠＄殑 Zone 鍩熷悕涓?**`example.com`**锛圸one ID: `47dc93e77f0002a933f33afe902c497a`锛夈€?- **鏍瑰洜鍒嗘瀽**锛?  Terraform 鍙橀噺涓殑榛樿涓诲煙鍚嶄笌瀹為檯浼犲叆鐨?Cloudflare Token 鏉冮檺鑼冨洿涓嶅尮閰嶏紝瀵艰嚧 Cloudflare Provider 鏌ヨ Zone 涓虹┖銆?- **瑙ｅ喅鏂规**锛?  鍦?`terraform.tfvars` 涓樉寮忔寚瀹?`domain = "example.com"`锛屽苟璁剧疆浜岀骇鍩熷悕鍓嶇紑 `prefix = "devops"`銆?
+     返回结果显示该 Token 所属用户账号为 `user@example.com`，实际托管的 Zone 域名为 **`example.com`**（Zone ID: `47dc93e77f0002a933f33afe902c497a`）。
+- **根因分析**：
+  Terraform 变量中的默认主域名与实际传入的 Cloudflare Token 权限范围不匹配，导致 Cloudflare Provider 查询 Zone 为空。
+- **解决方案**：
+  在 `terraform.tfvars` 中显式指定 `domain = "example.com"`，并设置二级域名前缀 `prefix = "devops"`。
+
 ---
 
-### 闂浜岋細鑵捐浜?VPC 缁勬挱鍔熻兘鏈巿鏉?(`The multicast feature is not authorized`)
+### 问题二：腾讯云 VPC 组播功能未授权 (`The multicast feature is not authorized`)
 
-- **鐜拌薄**锛?  鎵ц `terraform apply` 鍒涘缓 VPC 鍜屽瓙缃戣祫婧愭椂涓柇锛屾姤閿欏涓嬶細
+- **现象**：
+  执行 `terraform apply` 创建 VPC 和子网资源时中断，报错如下：
   ```text
   Error: [TencentCloudSDKError] Code=UnauthorizedOperation, 
   Message=The multicast feature is not authorized, RequestId=1c80c3b5-ceb5-4846-bed8-6029386a83a4
@@ -91,7 +169,14 @@ terraform apply -auto-approve
     on vpc.tf line 8, in resource "tencentcloud_vpc" "tf_vpc":
      8: resource "tencentcloud_vpc" "tf_vpc" {
   ```
-- **鎺掓煡杩囩▼**锛?  1. 妫€鏌ユ墽琛岃鍒掑彂鐜帮紝`tencentcloud_vpc` 鍜?`tencentcloud_subnet` 鐨勫睘鎬т腑 `is_multicast` 琚粯璁よ绠椾负 `+ is_multicast = true`銆?  2. 鏌ラ槄鑵捐浜?VPC 瀹樻柟鏂囨。鍙煡锛岀粍鎾紙Multicast锛夊睘浜庝紒涓氱骇/鐧藉悕鍗曢珮绾х綉缁滅壒鎬э紝鏅€氱鎴疯处鍙峰湪鍒涘缓 VPC 鏃跺鏋滆姹傚惎鐢ㄧ粍鎾紝浼氳鑵捐浜?OpenAPI 鐩存帴鎷︽埅骞惰繑鍥?`UnauthorizedOperation`銆?- **鏍瑰洜鍒嗘瀽**锛?  鏃╂湡鐗堟湰 `tencentcloud` Provider 鍦ㄥ畾涔夎祫婧愭ā鏉挎椂灏?`is_multicast` 榛樿鍊艰璁炬垨榛樿寮€鍚紝瀵艰嚧鍒涘缓璇锋眰鎼哄甫浜嗘湭鎺堟潈瀛楁銆?- **瑙ｅ喅鏂规**锛?  鍦?`vpc.tf` 鍜?`pg/vpc.tf` 涓负鎵€鏈?`tencentcloud_vpc` 鍜?`tencentcloud_subnet` 鏄惧紡璁剧疆 `is_multicast = false`锛?  ```hcl
+- **排查过程**：
+  1. 检查执行计划发现，`tencentcloud_vpc` 和 `tencentcloud_subnet` 的属性中 `is_multicast` 被默认计算为 `+ is_multicast = true`。
+  2. 查阅腾讯云 VPC 官方文档可知，组播（Multicast）属于企业级/白名单高级网络特性，普通租户账号在创建 VPC 时如果请求启用组播，会被腾讯云 OpenAPI 直接拦截并返回 `UnauthorizedOperation`。
+- **根因分析**：
+  早期版本 `tencentcloud` Provider 在定义资源模板时将 `is_multicast` 默认值误设或默认开启，导致创建请求携带了未授权字段。
+- **解决方案**：
+  在 `vpc.tf` 和 `pg/vpc.tf` 中为所有 `tencentcloud_vpc` 和 `tencentcloud_subnet` 显式设置 `is_multicast = false`：
+  ```hcl
   resource "tencentcloud_vpc" "tf_vpc" {
     name         = "tf-vpc"
     cidr_block   = var.vpc_cidr
@@ -111,24 +196,42 @@ terraform apply -auto-approve
 
 ---
 
-### 闂涓夛細绗笁鏂归暅鍍忓姞閫熸簮澶辨晥涓?GitHub 杩滅鍒嗘敮 404
+### 问题三：第三方镜像加速源失效与 GitHub 远端分支 404
 
-- **鐜拌薄**锛?  鍦?`init.sh.tpl` 涓墽琛?`setup_argo_image_updater` 鏃讹紝浠诲姟闀挎椂闂村崱姝绘寕璧锋垨鎶ラ敊 404锛?  ```bash
+- **现象**：
+  在 `init.sh.tpl` 中执行 `setup_argo_image_updater` 时，任务长时间卡死挂起或报错 404：
+  ```bash
   kubectl apply -n argocd -f https://ghproxy.com/https://raw.githubusercontent.com/argoproj-labs/argocd-image-updater/stable/manifests/install.yaml
   ```
-- **鎺掓煡杩囩▼**锛?  1. 鍗曠嫭閽堝 `https://ghproxy.com` 鍙戣捣缃戠粶鎺㈡祴锛屽彂鐜拌绗笁鏂逛唬鐞嗘湇鍔℃棭宸插仠姝㈢淮鎶や笖缃戠粶鐩存帴榛戞礊鎸傝捣銆?  2. 鍓ョ鍔犻€熷墠缂€鐩存帴璁块棶瀹樻柟婧愶細
+- **排查过程**：
+  1. 单独针对 `https://ghproxy.com` 发起网络探测，发现该第三方代理服务早已停止维护且网络直接黑洞挂起。
+  2. 剥离加速前缀直接访问官方源：
      ```bash
      curl -sI "https://raw.githubusercontent.com/argoproj-labs/argocd-image-updater/stable/manifests/install.yaml"
-     # 杩斿洖: HTTP/1.1 404 Not Found
+     # 返回: HTTP/1.1 404 Not Found
      ```
-  3. 杩涗竴姝ユ煡闃?`argocd-image-updater` 瀹樻柟浠撳簱鐨?Git 鍒嗘敮涓?Tag锛屽彂鐜颁笂娓哥淮鎶よ€呭凡绉婚櫎浜?`stable` 鍒嗘敮锛屾寮忓畨瑁呮竻鍗曞凡鏀圭敤鎸夌増鏈彂甯冿紙渚嬪 `v0.12.2`锛夈€?- **鏍瑰洜鍒嗘瀽**锛?  鑴氭湰寮轰緷璧栧凡姝绘帀鐨勭涓夋柟鍙嶅悜浠ｇ悊锛屽悓鏃剁‖缂栫爜浜嗕笂娓稿凡搴熷純鐨?Git 鍒嗘敮鍚嶃€傛澶栵紝鐢变簬 CVM 浣嶄簬鑵捐浜戦娓湴鍩燂紝鏈氨鍏峰瀹屽叏鐩存帴璁块棶 GitHub 鐨勮兘鍔涳紝鏃犻渶浠讳綍鍥藉唴鍔犻€熶唬鐞嗐€?- **瑙ｅ喅鏂规**锛?  淇敼 `init.sh.tpl` 绗?375 琛岋紝绉婚櫎 `ghproxy.com` 骞跺浐瀹氫负鍙敤鐨勫畼鏂圭ǔ瀹氬彂琛岀増娓呭崟锛?  ```bash
+  3. 进一步查阅 `argocd-image-updater` 官方仓库的 Git 分支与 Tag，发现上游维护者已移除了 `stable` 分支，正式安装清单已改用按版本发布（例如 `v0.12.2`）。
+- **根因分析**：
+  脚本强依赖已死掉的第三方反向代理，同时硬编码了上游已废弃的 Git 分支名。此外，由于 CVM 位于腾讯云香港地域，本就具备完全直接访问 GitHub 的能力，无需任何国内加速代理。
+- **解决方案**：
+  修改 `init.sh.tpl` 第 375 行，移除 `ghproxy.com` 并固定为可用的官方稳定发行版清单：
+  ```bash
   kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj-labs/argocd-image-updater/v0.12.2/manifests/install.yaml
   ```
 
 ---
 
-### 闂鍥涳細Ubuntu 榛樿 Shell (`dash`) 瀵艰嚧杩滅▼鑴氭湰璇硶鍏煎鎬ф晠闅?
-- **鐜拌薄**锛?  `k3s.tf` 涓?remote-exec 鎵ц鍣ㄤ娇鐢?`sh /tmp/init.sh` 鍚姩瀹夎锛屽湪鑴氭湰鎵ц杩囩▼涓洜 Bash 鐗规湁璇硶鎶ヨ娉曢敊璇紓甯镐腑鏂€?- **鎺掓煡杩囩▼**锛?  鍦?Ubuntu 绯荤粺涓紝`/bin/sh` 榛樿杞摼鎺ユ寚鍚戣交閲忕骇鐨?`dash`锛圖ebian Almquist Shell锛夛紝骞堕潪瀹屾暣鐨?`bash`銆傝€?`init.sh.tpl` 澶撮儴澹版槑浜?`#!/bin/bash`锛屽苟鍦ㄥ澶勪娇鐢ㄤ簡 Bash 鐨勬潯浠惰鍙ャ€佹暟缁勫強鎵╁睍琛ㄨ揪寮忋€?- **鏍瑰洜鍒嗘瀽**锛?  Terraform remote-exec 鏄惧紡璋冪敤 `sh /tmp/init.sh` 寮哄埗浣跨敤浜?`dash` 瑙ｉ噴鍣紝蹇界暐浜嗘枃浠跺ご閮ㄧ殑 Shebang 澹版槑銆?- **瑙ｅ喅鏂规**锛?  淇敼 `k3s.tf` 涓殑 remote-exec 鍛戒护锛屾樉寮忔寚瀹?`bash /tmp/init.sh`锛?  ```hcl
+### 问题四：Ubuntu 默认 Shell (`dash`) 导致远程脚本语法兼容性故障
+
+- **现象**：
+  `k3s.tf` 中 remote-exec 执行器使用 `sh /tmp/init.sh` 启动安装，在脚本执行过程中因 Bash 特有语法报语法错误异常中断。
+- **排查过程**：
+  在 Ubuntu 系统中，`/bin/sh` 默认软链接指向轻量级的 `dash`（Debian Almquist Shell），并非完整的 `bash`。而 `init.sh.tpl` 头部声明了 `#!/bin/bash`，并在多处使用了 Bash 的条件语句、数组及扩展表达式。
+- **根因分析**：
+  Terraform remote-exec 显式调用 `sh /tmp/init.sh` 强制使用了 `dash` 解释器，忽略了文件头部的 Shebang 声明。
+- **解决方案**：
+  修改 `k3s.tf` 中的 remote-exec 命令，显式指定 `bash /tmp/init.sh`：
+  ```hcl
   provisioner "remote-exec" {
     inline = [
       "chmod +x /tmp/init.sh",
@@ -139,23 +242,37 @@ terraform apply -auto-approve
 
 ---
 
-### 闂浜旓細妯″潡闂村苟鍙戞墽琛岀珵鎬佷笌渚濊禆鏈樉寮忓０鏄?(`depends_on`)
+### 问题五：模块间并发执行竞态与依赖未显式声明 (`depends_on`)
 
-- **鐜拌薄**锛?  鍦ㄥ垵濮嬮厤缃笅锛孴erraform 浼氬悓鏃跺苟鍙戞墽琛?`module.pg` 涓庢牴妯″潡鐨?`null_resource.connect_ubuntu`銆傚綋 K3s 鑺傜偣鎵ц `setup_cli` 瀹屾垚鍚庤繘鍏?`wait_pg` 闃舵鏃讹紝PG 鑺傜偣鐨勪簯鏈嶅姟鍣ㄧ敋鑷冲皻鏈畬鎴?Docker 瀹夎涓庡鍣ㄦ媺璧凤紝瀵艰嚧闀挎椂闂寸瓑寰呯敋鑷宠秴鏃躲€?- **鎺掓煡杩囩▼**锛?  妫€鏌?`k3s.tf`锛宍null_resource.connect_ubuntu` 浠呭湪妯℃澘鍙傛暟涓紩鐢ㄤ簡 `module.pg.public_ip`锛屼絾 Terraform 浠呰兘寰楃煡 IP 渚濊禆锛堜竴鏃?CVM 瀹炰緥鍒涘缓鎴愬姛 IP 灏卞凡纭畾锛夛紝鏃犳硶鎰熺煡 PG 鑺傜偣鍐呴儴閫氳繃 `null_resource.connect_pg_cvm` 鎵ц鐨?Docker 瀹夎涓庢暟鎹簱鍒濆鍖栫姸鎬併€?- **鏍瑰洜鍒嗘瀽**锛?  璺ㄦā鍧楄祫婧愬瓨鍦?*闅愬紡鐢熷懡鍛ㄦ湡渚濊禆**锛屾湭鏄惧紡澹版槑 DAG锛堟湁鍚戞棤鐜浘锛夋墽琛岄『搴忋€?- **瑙ｅ喅鏂规**锛?  鍦?`k3s.tf` 鐨?`null_resource.connect_ubuntu` 涓鍔犳樉寮忎緷璧栵細
+- **现象**：
+  在初始配置下，Terraform 会同时并发执行 `module.pg` 与根模块的 `null_resource.connect_ubuntu`。当 K3s 节点执行 `setup_cli` 完成后进入 `wait_pg` 阶段时，PG 节点的云服务器甚至尚未完成 Docker 安装与容器拉起，导致长时间等待甚至超时。
+- **排查过程**：
+  检查 `k3s.tf`，`null_resource.connect_ubuntu` 仅在模板参数中引用了 `module.pg.public_ip`，但 Terraform 仅能得知 IP 依赖（一旦 CVM 实例创建成功 IP 就已确定），无法感知 PG 节点内部通过 `null_resource.connect_pg_cvm` 执行的 Docker 安装与数据库初始化状态。
+- **根因分析**：
+  跨模块资源存在**隐式生命周期依赖**，未显式声明 DAG（有向无环图）执行顺序。
+- **解决方案**：
+  在 `k3s.tf` 的 `null_resource.connect_ubuntu` 中增加显式依赖：
   ```hcl
   resource "null_resource" "connect_ubuntu" {
     depends_on = [module.pg]
     ...
   }
   ```
-  纭繚 Terraform 蹇呴』鍦?`module.pg` 鍏ㄩ儴璧勬簮锛堝寘鍚暟鎹簱瀹瑰櫒鍚姩瀹屾垚锛夊氨缁悗锛屾墠瑙﹀彂 K3s 涓昏妭鐐圭殑鍒濆鍖栥€?
+  确保 Terraform 必须在 `module.pg` 全部资源（包含数据库容器启动完成）就绪后，才触发 K3s 主节点的初始化。
+
 ---
 
-### 闂鍏細GitLab Personal Access Token 鑷姩鍖栬幏鍙栫殑鑴嗗急鎬ф敼杩?
-- **鐜拌薄**锛?  `init.sh.tpl` 涓€氳繃妯℃嫙 `curl` 鐖彇 GitLab 鐧诲綍椤靛苟姝ｅ垯鍖归厤 CSRF Token 鍜?Token 鐢熸垚缁撴灉锛?  ```bash
+### 问题六：GitLab Personal Access Token 自动化获取的脆弱性改进
+
+- **现象**：
+  `init.sh.tpl` 中通过模拟 `curl` 爬取 GitLab 登录页并正则匹配 CSRF Token 和 Token 生成结果：
+  ```bash
   csrf_token=$(echo $body_header | perl -ne 'print "$1\n" if /new_user.*?authenticity_token"[[:blank:]]value="(.+?)"/' | sed -n 1p)
   ```
-  鍦?GitLab 鐗堟湰杩唬锛堟垨鍓嶇椤甸潰鍝嶅簲缁撴瀯寰皟锛夋椂锛屾瀬鏄撳洜姝ｅ垯鍖归厤钀界┖瀵艰嚧 `personal_access_token` 涓虹┖锛屾渶缁堜娇鏁翠釜鑴氭湰鍦ㄧ 107 琛岄€€鍑轰腑鏂€?- **瑙ｅ喅鏂规**锛?  鍦?`init.sh.tpl` 鐨?`setup_gitlab` 涓鍔犲弻閲嶄繚闄╂満鍒躲€備竴鏃﹂〉闈㈢埇鍙栦负绌猴紝绔嬪嵆鑷姩杩涘叆 Kubernetes Pod 鍐呴儴鐩存帴鍒╃敤 `gitlab-rails runner` 鍦ㄦ暟鎹簱灞傞潰绋冲畾鍒涘缓 PAT锛?  ```bash
+  在 GitLab 版本迭代（或前端页面响应结构微调）时，极易因正则匹配落空导致 `personal_access_token` 为空，最终使整个脚本在第 107 行退出中断。
+- **解决方案**：
+  在 `init.sh.tpl` 的 `setup_gitlab` 中增加双重保险机制。一旦页面爬取为空，立即自动进入 Kubernetes Pod 内部直接利用 `gitlab-rails runner` 在数据库层面稳定创建 PAT：
+  ```bash
   if [ -z "$personal_access_token" ]; then
     echo "Web scraping returned empty token, attempting to generate GitLab PAT via gitlab-rails..."
     toolbox_pod=$(kubectl get pod -n gitlab -l app=toolbox -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || kubectl get pod -n gitlab -l app=webservice -o jsonpath='{.items[0].metadata.name}')
@@ -170,8 +287,15 @@ terraform apply -auto-approve
 
 ---
 
-### 闂涓冿細SonarQube 瀹瑰櫒 Ready 涓?Web 寮曟搸鍒濆鍖?503 绔炴€?
-- **鐜拌薄**锛?  SonarQube 瀹夎鍚庯紝`kubectl wait --for=condition=Ready pod/sonarqube-sonarqube-0` 杩呴€熼€氳繃锛屼絾闅忓悗璋冪敤鐨?`http://sonar.${domain}/api/projects/create` 鍋跺彂鎶?`503 Service Unavailable`銆?- **鏍瑰洜鍒嗘瀽**锛?  SonarQube 灞炰簬 Java 閲嶅瀷搴旂敤锛孭od 鎺㈤拡 Ready 浠呬唬琛ㄧ鍙ｇ洃鍚紑鍚紝鍏跺唴閮ㄧ殑 Search Engine锛圗lasticsearch锛変笌 Compute Engine 闇€瑕侀澶栫殑 1~2 鍒嗛挓杩涜鎻掍欢鍔犺浇涓庢暟鎹簱杩佺Щ銆?- **瑙ｅ喅鏂规**锛?  鍦ㄨ皟鐢ㄩ」鐩垱寤?API 鍓嶏紝澧炲姞瀵?SonarQube 绯荤粺鏍稿績鐘舵€佹帰閽堢殑闃诲杞锛?  ```bash
+### 问题七：SonarQube 容器 Ready 与 Web 引擎初始化 503 竞态
+
+- **现象**：
+  SonarQube 安装后，`kubectl wait --for=condition=Ready pod/sonarqube-sonarqube-0` 迅速通过，但随后调用的 `http://sonar.${domain}/api/projects/create` 偶发报 `503 Service Unavailable`。
+- **根因分析**：
+  SonarQube 属于 Java 重型应用，Pod 探针 Ready 仅代表端口监听开启，其内部的 Search Engine（Elasticsearch）与 Compute Engine 需要额外的 1~2 分钟进行插件加载与数据库迁移。
+- **解决方案**：
+  在调用项目创建 API 前，增加对 SonarQube 系统核心状态探针的阻塞轮询：
+  ```bash
   echo "Waiting for SonarQube status UP"
   until curl -s http://sonar.${domain}/api/system/status | grep -q '"status":"UP"'; do
       sleep 3
@@ -180,18 +304,26 @@ terraform apply -auto-approve
 
 ---
 
-### 闂鍏細棣欐腐鍦板煙 S5 涓栦唬 16C 32G 瑙勬牸搴撳瓨鑰楀敖涓庣珵浠烽厤棰濊秴闄?
-- **鐜拌薄**锛?  1. 鍒濆閰嶇疆涓嬪垱寤?K3s 鑺傜偣锛坄tencentcloud_instance.ubuntu[0]`锛変娇鐢?`SPOTPAID`锛屾姏鍑烘姤閿欙細
+### 问题八：香港地域 S5 世代 16C 32G 规格库存耗尽与竞价配额超限
+
+- **现象**：
+  1. 初始配置下创建 K3s 节点（`tencentcloud_instance.ubuntu[0]`）使用 `SPOTPAID`，抛出报错：
      ```text
      Error: [TencentCloudSDKError] Code=LimitExceeded.SpotQuota, 
      Message=The quota of spot instance types is insufficient.
      ```
-  2. 鍒囨崲涓?`POSTPAID_BY_HOUR`锛堟寜閲忚璐癸級鍚庨噸璇曪紝鍐嶆鎶涘嚭搴曞眰鐗╃悊鏈哄敭缃勯敊璇細
+  2. 切换为 `POSTPAID_BY_HOUR`（按量计费）后重试，再次抛出底层物理机售罄错误：
      ```text
      Error: [TencentCloudSDKError] Code=ResourceInsufficient.SpecifiedInstanceType, 
      Message=The specified type of instance is understocked.
      ```
-- **鎺掓煡杩囩▼**锛?  1. 閫氳繃 `terraform console` 娣卞叆鍒嗘瀽 `data.tencentcloud_instance_types.default` 鐨勫簳灞傝繑鍥炵粨鏋滐紝鍙戠幇 `S5.4XLARGE32` 鍦ㄩ娓簩鍖虹殑鐪熷疄搴撳瓨鐘舵€佹槑纭爣璁颁负锛歚"status" = "SOLD_OUT"`銆?  2. 鍦ㄦ暟鎹簮涓紑鍚?`exclude_sold_out = true` 杩涜瀛橀噺鏈哄瀷鍔ㄦ€佹帰娴嬶紝鍙戠幇鑵捐浜戝凡灏嗙畻鍔涗富鍔涘崌绾ц嚦绗叚浠ｆ爣鍑嗗瀷锛圫6锛変笌 AMD 浠ｉ檯鍨嬶紙SA5/S8锛夛紝鍏朵腑 `S6.4XLARGE32`锛?6C 32G锛夊浜庡簱瀛樺厖瑁曪紙`"status" = "SELL"`锛夌姸鎬併€?- **鏍瑰洜鍒嗘瀽**锛?  鍘嗗彶璇句欢鍥哄畾浜嗙浜斾唬锛圫5锛夎€佹満鍨嬨€傞€氳繃璋冪敤鑵捐浜戝簳灞?CVM API 鎵ц `RunInstances(DryRun=True)` 璇婃柇鍙煡锛宍S5.4XLARGE32` 鎶涘嚭 `LimitExceeded.SpotQuota` 鐨勪腑鏂囩湡瀹炲簳灞備俊鎭负锛歚鎸囧畾鍙敤鍖虹珵浠峰疄渚嬪敭缃刞锛涜€岃处鍙峰湪棣欐腐浜屽尯鐨勫疄闄呯珵浠烽厤棰濇€婚噺鍏呰锛圱otalQuota: 200锛夈€?- **瑙ｅ喅鏂规**锛?  鍦?`cvm.tf` 涓皢瀹炰緥鏃忓畾涔夊垏鑷崇鍏唬涓诲姏浠ｉ檯 `S6`锛屽苟鍚敤鍔ㄦ€佸敭缃勬帓闄よ繃婊ゅ櫒 `exclude_sold_out = true`锛屽悓鏃惰缃?`instance_charge_type = var.instance_charge_type`锛堥粯璁?`"SPOTPAID"`锛夛細
+- **排查过程**：
+  1. 通过 `terraform console` 深入分析 `data.tencentcloud_instance_types.default` 的底层返回结果，发现 `S5.4XLARGE32` 在香港二区的真实库存状态明确标记为：`"status" = "SOLD_OUT"`。
+  2. 在数据源中开启 `exclude_sold_out = true` 进行存量机型动态探测，发现腾讯云已将算力主力升级至第六代标准型（S6）与 AMD 代际型（SA5/S8），其中 `S6.4XLARGE32`（16C 32G）处于库存充裕（`"status" = "SELL"`）状态。
+- **根因分析**：
+  历史课件固定了第五代（S5）老机型。通过调用腾讯云底层 CVM API 执行 `RunInstances(DryRun=True)` 诊断可知，`S5.4XLARGE32` 抛出 `LimitExceeded.SpotQuota` 的中文真实底层信息为：`指定可用区竞价实例售罄`；而账号在香港二区的实际竞价配额总量充裕（TotalQuota: 200）。
+- **解决方案**：
+  在 `cvm.tf` 中将实例族定义切至第六代主力代际 `S6`，并启用动态售罄排除过滤器 `exclude_sold_out = true`，同时设置 `instance_charge_type = var.instance_charge_type`（默认 `"SPOTPAID"`）：
   ```hcl
   data "tencentcloud_instance_types" "default" {
     filter {
@@ -209,16 +341,25 @@ terraform apply -auto-approve
     memory_size      = 32
   }
   ```
-  閫氳繃鐪熷疄 DryRun 楠岃瘉涓?Terraform 閮ㄧ讲楠岃瘉锛宍S6.4XLARGE32`锛?6C 32G锛夐『鍒╀互 **`SPOTPAID` 绔炰环瀹炰緥** 鍒涘缓鎴愬姛锛屽疄鐜颁富鑺傜偣涓?PG 鏁版嵁搴撹妭鐐?**100% 鍏ㄧ珵浠峰疄渚嬭繍琛?*銆?
+  通过真实 DryRun 验证与 Terraform 部署验证，`S6.4XLARGE32`（16C 32G）顺利以 **`SPOTPAID` 竞价实例** 创建成功，实现主节点与 PG 数据库节点 **100% 全竞价实例运行**。
+
 ---
 
-### 闂涔濓細K3s 榛樿 Kubeconfig 鏉冮檺闄愬埗鑷存櫘閫氱敤鎴锋棤娉曡鍙?(`open /etc/rancher/k3s/k3s.yaml: permission denied`)
+### 问题九：K3s 默认 Kubeconfig 权限限制致普通用户无法读取 (`open /etc/rancher/k3s/k3s.yaml: permission denied`)
 
-- **鐜拌薄**锛?  鍦?`init.sh.tpl` 鎵ц杩囩▼涓垨鍚庣画閫氳繃 SSH 杩炴帴鑺傜偣鎵ц `kubectl` / `helm` 鍛戒护鏃舵姏鍑洪敊璇細
+- **现象**：
+  在 `init.sh.tpl` 执行过程中或后续通过 SSH 连接节点执行 `kubectl` / `helm` 命令时抛出错误：
   ```text
   error loading config file "/etc/rancher/k3s/k3s.yaml": open /etc/rancher/k3s/k3s.yaml: permission denied
   ```
-- **鎺掓煡杩囩▼**锛?  1. K3s 瀹樻柟瀹夎鑴氭湰浠?`root` 鏉冮檺鎷夎捣鏈嶅姟锛屽湪 `/etc/rancher/k3s` 涓嬬敓鎴愮殑 `k3s.yaml` 榛樿妯″紡涓?`0600`锛屼笖鐖剁洰褰曟潈闄愪负 `0700`銆?  2. Terraform remote-exec 涓庤繙绋嬬鐞?SSH 榛樿浣跨敤鐨勬槸闈?root 璐﹀彿 `ubuntu`銆傚綋浠?`ubuntu` 韬唤璋冪敤 `kubectl` 鎴栫敱瀛愯繘绋嬭皟鐢?Helm 鏃讹紝鐢变簬缂轰箯鏂囦欢璇诲彇鏉冮檺锛屽鑷撮泦缇ら厤缃姞杞戒腑鏂€?- **鏍瑰洜鍒嗘瀽**锛?  K3s 瀹夊叏绛栫暐榛樿涓ユ牸鏀剁揣閰嶇疆鏂囦欢璇诲彇鏉冮檺锛涘師鑴氭湰鏈皢 kubeconfig 閰嶇疆褰掗泦骞惰祴鏉冭嚦闈?root 鐢ㄦ埛瀹剁洰褰曘€?- **瑙ｅ喅鏂规**锛?  鍦?`init.sh.tpl` 鐨?`setup_k3s` 鍑芥暟涓紝瀹屾垚闆嗙兢瀹夎鍚庢樉寮忔斁閫氳鏉冮檺骞舵爣鍑嗗寲閰嶇疆锛?  ```bash
+- **排查过程**：
+  1. K3s 官方安装脚本以 `root` 权限拉起服务，在 `/etc/rancher/k3s` 下生成的 `k3s.yaml` 默认模式为 `0600`，且父目录权限为 `0700`。
+  2. Terraform remote-exec 与远程管理 SSH 默认使用的是非 root 账号 `ubuntu`。当以 `ubuntu` 身份调用 `kubectl` 或由子进程调用 Helm 时，由于缺乏文件读取权限，导致集群配置加载中断。
+- **根因分析**：
+  K3s 安全策略默认严格收紧配置文件读取权限；原脚本未将 kubeconfig 配置归集并赋权至非 root 用户家目录。
+- **解决方案**：
+  在 `init.sh.tpl` 的 `setup_k3s` 函数中，完成集群安装后显式放通读权限并标准化配置：
+  ```bash
   # Ensure permissions for non-root user ubuntu
   sudo chmod 755 /etc/rancher /etc/rancher/k3s
   sudo chmod 644 /etc/rancher/k3s/k3s.yaml
@@ -231,14 +372,24 @@ terraform apply -auto-approve
 
 ---
 
-### 闂鍗侊細Bitnami 闀滃儚婧愪粨搴撹縼绉绘竻鐞嗕笌 MinIO 瀹瑰櫒鍚姩鍙傛暟涓嶅吋瀹?(`ImagePullBackOff` & `exec: -C: invalid option`)
+### 问题十：Bitnami 镜像源仓库迁移清理与 MinIO 容器启动参数不兼容 (`ImagePullBackOff` & `exec: -C: invalid option`)
 
-- **鐜拌薄**锛?  1. `gitlab` 鍛藉悕绌洪棿涓嬬殑 `gitlab-postgresql-0`銆乣gitlab-redis-master-0` 浠ュ強 `gitlab-minio`锛屽湪鎷夊彇 `docker.io/bitnami/postgresql:13.6.0`銆乣docker.io/bitnami/redis:6.2.7-debian-11-r11`銆乣minio/minio:RELEASE.2017-12-28T01-21-00Z` 绛夐暅鍍忔椂鍏ㄩ儴鍑虹幇 `ImagePullBackOff`锛屾姤 `pull access denied, repository does not exist or may require authorization` 鎴?`insufficient_scope`銆?  2. 鍘?GitLab Chart 鍐呯疆鐨?MinIO 寮曠敤浜嗚繙鍙ゅ畼鏂归暅鍍?`minio/minio:RELEASE.2017-12-28T01-21-00Z`锛屽湪鍏叡 Registry 涓婅涓嬫灦瀵艰嚧 403/401銆傚綋灏濊瘯鍒囨崲涓?Bitnami 鐨?MinIO 闀滃儚鍚庯紝瀹瑰櫒杩涘叆 `CrashLoopBackOff`锛屾姤閿欙細
+- **现象**：
+  1. `gitlab` 命名空间下的 `gitlab-postgresql-0`、`gitlab-redis-master-0` 以及 `gitlab-minio`，在拉取 `docker.io/bitnami/postgresql:13.6.0`、`docker.io/bitnami/redis:6.2.7-debian-11-r11`、`minio/minio:RELEASE.2017-12-28T01-21-00Z` 等镜像时全部出现 `ImagePullBackOff`，报 `pull access denied, repository does not exist or may require authorization` 或 `insufficient_scope`。
+  2. 原 GitLab Chart 内置的 MinIO 引用了远古官方镜像 `minio/minio:RELEASE.2017-12-28T01-21-00Z`，在公共 Registry 上被下架导致 403/401。当尝试切换为 Bitnami 的 MinIO 镜像后，容器进入 `CrashLoopBackOff`，报错：
      ```text
      /opt/bitnami/scripts/minio/entrypoint.sh: line 23: exec: -C: invalid option
      exec: usage: exec [-cl] [-a name] [command [argument ...]] [redirection ...]
      ```
-- **鎺掓煡杩囩▼**锛?  1. 缁忚皟鐮旓紝Broadcom 鏀惰喘 VMware/Bitnami 鍚庯紝瀵?Docker Hub 涓婄殑鍏叡浠撳簱杩涜浜嗗ぇ瑙勬ā閲嶆瀯锛屾墍鏈夊巻鍙蹭笉鍙彉 Tag 宸茶绉诲嚭瀹樻柟涓讳粨搴擄紝杩佺Щ鑷?`bitnamilegacy/` 鍛藉悕绌洪棿锛涘悓鏃?MinIO 瀹樻柟涔熷湪 2025 骞村簳鍋滄鍚?Docker Hub 鍜?Quay.io 鍏紑鍙戝竷鍏嶈垂绀惧尯闀滃儚銆?  2. 閽堝鍚姩鍙傛暟锛欸itLab Chart 涓?MinIO 瀹瑰櫒榛樿浼犻€掔殑鍚姩鍙傛暟鏄?`args: ["-C", "/tmp/.minio", "--quiet", "server", "/export"]`銆傝€屽湪 Bitnami 鐨勫惎鍔ㄨ剼鏈?`entrypoint.sh` 涓紝鏈熬浣跨敤浜?`exec "$@"`銆傚綋瀹瑰櫒鏈寚瀹?entrypoint 鑰?args 浼犲叆 `-C` 寮€澶存椂锛孊ash 鍐呯疆鐨?`exec` 鍛戒护鐩存帴灏?`-C` 璇嗗埆涓洪潪娉曞弬鏁帮紝瀵艰嚧瀹瑰櫒绉掗€€銆?- **鏍瑰洜鍒嗘瀽**锛?  涓婃父鍏叡闀滃儚浠撳簱瑙勫垯鏀剁揣瀵艰嚧鍘嗗彶纭紪鐮侀暅鍍?Tag 澶辨晥锛涘悓鏃朵笉鍚屽彂琛岀増锛堝畼鏂?MinIO 鍘熺敓浜岃繘鍒?vs Bitnami 鎵撳寘鍖呰鑴氭湰锛夌殑 CLI 鍛戒护鍙傛暟瑙勮寖瀛樺湪涓嶅吋瀹规柇灞傘€?- **瑙ｅ喅鏂规**锛?  1. **鑷姩鍖栨媺鍙栦笌鏈湴鍛藉悕绌洪棿閲嶆墦鏍?*锛?     鍦?`init.sh.tpl` 涓柊澧?`setup_legacy_images`锛岀洿鎺ヤ粠 `bitnamilegacy` 鍛藉悕绌洪棿鎷夊彇瀵瑰簲闀滃儚锛屽苟閫氳繃 containerd `ctr --namespace k8s.io` 鍦ㄦ湰鍦版墦涓婅€佺増鏈墍闇€鐨?tag锛屽疄鐜颁笂灞?Chart 鐨勯浂鎰熼€忔槑杩愯锛?     ```bash
+- **排查过程**：
+  1. 经调研，Broadcom 收购 VMware/Bitnami 后，对 Docker Hub 上的公共仓库进行了大规模重构，所有历史不可变 Tag 已被移出官方主仓库，迁移至 `bitnamilegacy/` 命名空间；同时 MinIO 官方也在 2025 年底停止向 Docker Hub 和 Quay.io 公开发布免费社区镜像。
+  2. 针对启动参数：GitLab Chart 为 MinIO 容器默认传递的启动参数是 `args: ["-C", "/tmp/.minio", "--quiet", "server", "/export"]`。而在 Bitnami 的启动脚本 `entrypoint.sh` 中，末尾使用了 `exec "$@"`。当容器未指定 entrypoint 而 args 传入 `-C` 开头时，Bash 内置的 `exec` 命令直接将 `-C` 识别为非法参数，导致容器秒退。
+- **根因分析**：
+  上游公共镜像仓库规则收紧导致历史硬编码镜像 Tag 失效；同时不同发行版（官方 MinIO 原生二进制 vs Bitnami 打包包装脚本）的 CLI 命令参数规范存在不兼容断层。
+- **解决方案**：
+  1. **自动化拉取与本地命名空间重打标**：
+     在 `init.sh.tpl` 中新增 `setup_legacy_images`，直接从 `bitnamilegacy` 命名空间拉取对应镜像，并通过 containerd `ctr --namespace k8s.io` 在本地打上老版本所需的 tag，实现上层 Chart 的零感透明运行：
+     ```bash
      setup_legacy_images() {
          echo "Pre-pulling and tagging legacy Bitnami/MinIO images..."
          sudo k3s ctr --namespace k8s.io images pull docker.io/bitnamilegacy/postgresql:13.6.0 || true
@@ -253,7 +404,9 @@ terraform apply -auto-approve
          sudo k3s ctr --namespace k8s.io images tag docker.io/bitnamilegacy/minio:2022.6.20-debian-11-r0 docker.io/minio/minio:RELEASE.2017-12-28T01-21-00Z || true
      }
      ```
-  2. **GitLab MinIO 鍚姩鎸囦护鎵撹ˉ涓?*锛?     閽堝 `gitlab-minio` 鐨勫惎鍔ㄥ懡浠ゅ啿绐侊紝鍦ㄩ儴缃插畬鎴愬悗鑷姩浣跨敤 Kubernetes Patch 淇瀹瑰櫒鎵ц鍏ュ彛涓?`/opt/bitnami/minio/bin/minio`锛屽苟鏄惧紡鎸囧畾绔彛锛屽交搴曡В鍐?CrashLoopBackOff锛?     ```bash
+  2. **GitLab MinIO 启动指令打补丁**：
+     针对 `gitlab-minio` 的启动命令冲突，在部署完成后自动使用 Kubernetes Patch 修正容器执行入口为 `/opt/bitnami/minio/bin/minio`，并显式指定端口，彻底解决 CrashLoopBackOff：
+     ```bash
      cat << 'EOF' > /tmp/minio-patch.yaml
      spec:
        template:
@@ -275,40 +428,68 @@ terraform apply -auto-approve
 
 ---
 
-### 闂鍗佷竴锛欽enkins 鍙よ懀闀滃儚涓庢彃浠剁増鏈己閿佹瀵艰嚧渚濊禆绾ц仈鍐茬獊涓庡惎鍔ㄥ穿婧?(`workflow-job requires Jenkins 2.504.3`)
+### 问题十一：Jenkins 古董镜像与插件版本强锁死导致依赖级联冲突与启动崩溃 (`workflow-job requires Jenkins 2.504.3`)
 
-- **鐜拌薄**锛?  鍦?`init.sh.tpl` 鎵ц鍒?`setup_jenkins` 鏃讹紝`helm upgrade -i jenkins` 鍒涘缓鐨?Pod `jenkins-0` 闀挎湡澶勪簬 `Init:0/1` 鐘舵€併€?  鏌ョ湅 Init 瀹瑰櫒鏃ュ織锛坄kubectl logs -n jenkins jenkins-0 -c init`锛夛紝鎶涘嚭澶ч噺渚濊禆閿佹鏍￠獙閿欒锛?  ```text
+- **现象**：
+  在 `init.sh.tpl` 执行到 `setup_jenkins` 时，`helm upgrade -i jenkins` 创建的 Pod `jenkins-0` 长期处于 `Init:0/1` 状态。
+  查看 Init 容器日志（`kubectl logs -n jenkins jenkins-0 -c init`），抛出大量依赖锁死校验错误：
+  ```text
   Some plugins could not be fit for installation:
     workflow-job requires a greater version of Jenkins (2.504.3) than 2.414.1
     configuration-as-code:1670.v564dc466935a_ requires...
   ```
-- **鎺掓煡杩囩▼**锛?  1. 妫€鏌?`jenkins/values.yaml.tpl`锛屽師閰嶇疆纭紪鐮佷簡鑰佹棫鐗堟湰锛?     ```yaml
+- **排查过程**：
+  1. 检查 `jenkins/values.yaml.tpl`，原配置硬编码了老旧版本：
+     ```yaml
      controller:
        image: "jenkins/jenkins"
-       tag: "2.414.1" # 2023骞磋€佹牳蹇冪増鏈?       installPlugins:
+       tag: "2.414.1" # 2023年老核心版本
+       installPlugins:
          - kubernetes:3939.v603a_5e608034
          - workflow-aggregator:596.v8c21c963d92d
          - git:5.1.0
          - configuration-as-code:1670.v564dc466935a_
      ```
-  2. 娣卞叆鍒嗘瀽 Jenkins 瀹樻柟鎻掍欢瀹夎鏈哄埗锛歚jenkins-plugin-cli` 浼氳嚜鍔ㄤ粠 Jenkins 鏇存柊涓績瑙ｆ瀽骞朵笅杞界洰鏍囨彃浠剁殑鏈€鏂颁緷璧栭」銆傚綋 values 涓己琛岄攣姝诲巻鍙茶€佹彃浠剁増鏈椂锛屽叾閫掑綊渚濊禆椤癸紙濡?`workflow-job`锛夋棭宸插湪瀹樻柟涓績鏇存柊杩唬锛屾渶鏂颁緷璧栭」寮哄埗瑕佹眰杩愯鍦?Jenkins 鏍稿績寮曟搸 `2.504+` 鍜?JDK 17 涓娿€傝€侀暅鍍?`2.414.1` 鏍￠獙涓嶉€氳繃锛屽鑷?Init 瀹瑰櫒瀹夎澶辫触閫€鍑恒€?- **鏍瑰洜鍒嗘瀽**锛?  Jenkins 闀滃儚鏍稿績鐗堟湰锛?.414.1锛夎繃浜庤€佹棫锛屼笌鐜颁唬鎻掍欢鐢熸€佹柇灞傦紱鍚屾椂 values 涓己琛屽啓姝荤壒瀹氬巻鍙插搱甯岀増鏈紝瀵艰嚧渚濊禆鍦扮嫳锛圖ependency Hell锛夈€?- **瑙ｅ喅鏂规**锛?  1. 灏?Jenkins 闀滃儚鍏ㄩ潰鍗囩骇鑷冲畼鏂圭淮鎶ょ殑绋冲畾鍩虹嚎锛?     `controller.tag = "lts-jdk17"`锛堝疄闄呰繍琛岀増鏈负 `2.541.3` + OpenJDK 17锛夈€?  2. 绉婚櫎 `values.yaml.tpl` 涓啓姝荤殑鎵€鏈夋彃浠剁増鏈悗缂€锛堝墺绂?`:3939...` 绛夌増鏈彿锛夛紝璁?Jenkins 瀹樻柟鍐呯疆鐨?`jenkins-plugin-cli` 鍔ㄦ€佽嚜鍔ㄨВ鏋愪笅杞戒笌褰撳墠 Jenkins 鏍稿績鐗堟湰瀹屽叏鑷唇鍏煎鐨勬渶鏂扮ǔ瀹氭彃浠堕泦銆?  3. 淇敼鍚庨噸璺戯紝鎻掍欢瀹夎椤哄埄閫氳繃锛孞CasC 鑷姩璇诲彇骞舵垚鍔熷姞杞芥祦姘寸嚎浠诲姟 `build-go-example` 涓?SonarQube / GitLab 鍑嵁锛孭od 鐘舵€侀『鍒╄揪鍒?`2/2 Running`銆?
+  2. 深入分析 Jenkins 官方插件安装机制：`jenkins-plugin-cli` 会自动从 Jenkins 更新中心解析并下载目标插件的最新依赖项。当 values 中强行锁死历史老插件版本时，其递归依赖项（如 `workflow-job`）早已在官方中心更新迭代，最新依赖项强制要求运行在 Jenkins 核心引擎 `2.504+` 和 JDK 17 上。老镜像 `2.414.1` 校验不通过，导致 Init 容器安装失败退出。
+- **根因分析**：
+  Jenkins 镜像核心版本（2.414.1）过于老旧，与现代插件生态断层；同时 values 中强行写死特定历史哈希版本，导致依赖地狱（Dependency Hell）。
+- **解决方案**：
+  1. 将 Jenkins 镜像全面升级至官方维护的稳定基线：
+     `controller.tag = "lts-jdk17"`（实际运行版本为 `2.541.3` + OpenJDK 17）。
+  2. 移除 `values.yaml.tpl` 中写死的所有插件版本后缀（剥离 `:3939...` 等版本号），让 Jenkins 官方内置的 `jenkins-plugin-cli` 动态自动解析下载与当前 Jenkins 核心版本完全自洽兼容的最新稳定插件集。
+  3. 修改后重跑，插件安装顺利通过，JCasC 自动读取并成功加载流水线任务 `build-go-example` 与 SonarQube / GitLab 凭据，Pod 状态顺利达到 `2/2 Running`。
+
 ---
 
-### 闂鍗佷簩锛歋onarQube 瀛愬浘渚濊禆 Bitnami PostgreSQL 闀滃儚涓嬫灦瀵艰嚧 `ImagePullBackOff`
+### 问题十二：SonarQube 子图依赖 Bitnami PostgreSQL 镜像下架导致 `ImagePullBackOff`
 
-- **鐜拌薄**锛?  鍦?`init.sh.tpl` 鎵ц鍒?`setup_sonarqube` 鏃讹紝Helm 閮ㄧ讲鐨?`sonarqube-postgresql-0` 闀挎椂闂村浜?`ImagePullBackOff`锛屾姤閿欙細
+- **现象**：
+  在 `init.sh.tpl` 执行到 `setup_sonarqube` 时，Helm 部署的 `sonarqube-postgresql-0` 长时间处于 `ImagePullBackOff`，报错：
   ```text
   Failed to pull image "docker.io/bitnami/postgresql:11.14.0-debian-10-r22": rpc error: code = NotFound desc = failed to pull and unpack image ...: not found
   ```
-  鐢变簬鏁版嵁搴?Pod 鏃犳硶鍚姩锛屽鑷?SonarQube 涓绘湇鍔?Init 瀹瑰櫒 `wait-for-db` 闄峰叆鏃犻檺姝荤瓑锛岄樆濉炴暣涓儴缃叉祦绋嬨€?- **鎺掓煡杩囩▼**锛?  1. 妫€鏌?SonarQube Helm Chart `10.1.0+628` 鐨勪緷璧栭厤缃紝鍏堕€氳繃 Chart 渚濊禆鎵撳寘浜?Bitnami 鐨?PostgreSQL Chart `10.15.0`锛岄粯璁ら攣姝婚暅鍍忎负 `docker.io/bitnami/postgresql:11.14.0-debian-10-r22`銆?  2. 灏濊瘯浠?Docker Hub 鍙?`bitnamilegacy` 鍛藉悕绌洪棿鎷夊彇璇?Tag锛屽潎杩斿洖 `manifest unknown` 鎴?`not found`锛堣瀹樻柟褰诲簳娓呯悊锛夈€?  3. 鏌ラ槄 SonarQube 10.1 瀹樻柟鍏煎鐭╅樀锛孲onarQube 10.1 鍘熺敓瀹樻柟璁よ瘉鏀寔 PostgreSQL 13銆?4 涓?15 鐗堟湰銆?  4. 妫€鏌ヨ妭鐐规湰鍦伴暅鍍忥紝鍦?`setup_legacy_images` 闃舵宸蹭粠 `bitnamilegacy/postgresql:13.6.0` 鎴愬姛鎷夊彇骞堕獙璇佽繃 PostgreSQL 13 闀滃儚銆?- **鏍瑰洜鍒嗘瀽**锛?  涓婃父鍏叡浠撳簱璋冩暣瀵艰嚧鍘嗗彶 11.x Tag 缁濈増锛屼笌闂鍗佺被浼硷紝灞炰簬绗笁鏂?Docker 闀滃儚鐢熷懡鍛ㄦ湡绠＄悊鏂眰銆?- **瑙ｅ喅鏂规**锛?  鍦?`init.sh.tpl` 鐨?`setup_legacy_images` 鍑芥暟涓紝澧炲姞鏈湴鍛藉悕绌洪棿閲嶆墦鏍囷細
+  由于数据库 Pod 无法启动，导致 SonarQube 主服务 Init 容器 `wait-for-db` 陷入无限死等，阻塞整个部署流程。
+- **排查过程**：
+  1. 检查 SonarQube Helm Chart `10.1.0+628` 的依赖配置，其通过 Chart 依赖打包了 Bitnami 的 PostgreSQL Chart `10.15.0`，默认锁死镜像为 `docker.io/bitnami/postgresql:11.14.0-debian-10-r22`。
+  2. 尝试从 Docker Hub 及 `bitnamilegacy` 命名空间拉取该 Tag，均返回 `manifest unknown` 或 `not found`（被官方彻底清理）。
+  3. 查阅 SonarQube 10.1 官方兼容矩阵，SonarQube 10.1 原生官方认证支持 PostgreSQL 13、14 与 15 版本。
+  4. 检查节点本地镜像，在 `setup_legacy_images` 阶段已从 `bitnamilegacy/postgresql:13.6.0` 成功拉取并验证过 PostgreSQL 13 镜像。
+- **根因分析**：
+  上游公共仓库调整导致历史 11.x Tag 绝版，与问题十类似，属于第三方 Docker 镜像生命周期管理断层。
+- **解决方案**：
+  在 `init.sh.tpl` 的 `setup_legacy_images` 函数中，增加本地命名空间重打标：
   ```bash
   sudo k3s ctr --namespace k8s.io images tag docker.io/bitnamilegacy/postgresql:13.6.0 docker.io/bitnami/postgresql:11.14.0-debian-10-r22 || true
   ```
-  鍒╃敤鍘熺敓鏀寔涓斿凡楠岃瘉灏辩华鐨?PostgreSQL 13.6.0 闀滃儚鐩存帴鎵胯浇 SonarQube 鏁版嵁鏈嶅姟锛屽鍣ㄧ绾у惎鍔紝鏁版嵁搴撳氨缁帰閽堢绾ч€氳繃銆?
+  利用原生支持且已验证就绪的 PostgreSQL 13.6.0 镜像直接承载 SonarQube 数据服务，容器秒级启动，数据库就绪探针秒级通过。
+
 ---
 
-### 闂鍗佷笁锛欽enkins GitLab 鍒嗘敮婧?SSL 鎻℃墜澶辫触 (`PKIX path building failed`) 瀵艰嚧 MultiBranch 鏃犳硶鍙戠幇娴佹按绾垮垎鏀?
-- **鐜拌薄**锛?  鍦ㄥ叏鏍堟湇鍔℃媺璧峰悗锛孞enkins 涓殑澶氬垎鏀祦姘寸嚎锛圡ultiBranch Pipeline锛変换鍔?`build-go-example` 鎵ц鍒嗘敮鎵弿锛圔ranch Indexing锛夋椂鎻愮ず `Finished: FAILURE`锛屼换鍔¤鎯呬腑鍒嗘敮鍒楄〃涓虹┖锛坄jobs: []`锛夛紝娴佹按绾挎棤娉曡嚜鍔ㄨ瑙﹀彂鏋勫缓銆?  鏌ョ湅鍒嗘敮鎵弿鏃ュ織锛坄Indexing Console Log`锛夛細
+### 问题十三：Jenkins GitLab 分支源 SSL 握手失败 (`PKIX path building failed`) 导致 MultiBranch 无法发现流水线分支
+
+- **现象**：
+  在全栈服务拉起后，Jenkins 中的多分支流水线（MultiBranch Pipeline）任务 `build-go-example` 执行分支扫描（Branch Indexing）时提示 `Finished: FAILURE`，任务详情中分支列表为空（`jobs: []`），流水线无法自动被触发构建。
+  查看分支扫描日志（`Indexing Console Log`）：
   ```text
   [Branch Indexing] Starting branch indexing...
   ERROR: Could not update folder level actions from source build-go-example
@@ -322,7 +503,9 @@ terraform apply -auto-approve
       at PluginClassLoader for gitlab-branch-source//io.jenkins.plugins.gitlabbranchsource.GitLabSCMSource.retrieveActions(GitLabSCMSource.java:714)
   Finished: FAILURE
   ```
-- **鎺掓煡杩囩▼**锛?  1. 妫€鏌?`jenkins/values.yaml.tpl` 涓殑 JCasC 閰嶇疆锛屽彂鐜?`gitLabServers` 閰嶇疆椤逛负锛?     ```yaml
+- **排查过程**：
+  1. 检查 `jenkins/values.yaml.tpl` 中的 JCasC 配置，发现 `gitLabServers` 配置项为：
+     ```yaml
      gitLabServers:
        servers:
          - credentialsId: "gitlab-token"
@@ -330,7 +513,13 @@ terraform apply -auto-approve
            name: "gitlab-server"
            serverUrl: "https://gitlab.${domain}"
      ```
-  2. Jenkins 杩愯鍦?OpenJDK 瀹瑰櫒鍐呴儴锛屽叾搴曞眰鐨?Java JVM TrustStore锛坄$JAVA_HOME/lib/security/cacerts`锛夐粯璁や粎鍖呭惈鍏ㄧ悆涓绘祦鍏叡 CA 鏍硅瘉涔︺€?  3. 铏界劧 GitLab 閮ㄧ讲鍦ㄥ悓闆嗙兢鍐呭苟閫氳繃 Ingress 鏆撮湶锛屼絾鐢变簬鑷缓鐜涓瘉涔︽垨鑰呭煙鍚嶆湭鍦?JVM 涓鍏ュ彈淇′换鏍硅瘉涔︼紝Java 鍦ㄥ彂璧?HTTPS API 璋冪敤锛坄GET /api/v4/projects/...`锛夋椂瑙﹀彂 PKIX 璇佷功閾炬牎楠岄樆鏂紝瀵艰嚧 `gitlab4j` 瀹㈡埛绔繛鎺ヨ鎷掋€?- **鏍瑰洜鍒嗘瀽**锛?  Jenkins 瀹瑰櫒鐜涓嬬殑 Java 杩愯鏃剁己涔忕洰鏍?GitLab 鍩熷悕鐨勫彈淇′换璇佷功閾撅紝HTTPS 鎻℃墜鍥犲畨鍏ㄦ牎楠岀瓥鐣ュけ璐ワ紝闃绘柇浜?GitLab 鍒嗘敮鎵弿涓?Jenkinsfile 鍙戠幇銆?- **瑙ｅ喅鏂规**锛?  鍦?`jenkins/values.yaml.tpl` 涓皢 GitLab Server 鐨勬湇鍔″崗璁皟鏁翠负闆嗙兢鍐呴儴 Ingress 鍏煎鐨?HTTP 鍗忚锛?  ```yaml
+  2. Jenkins 运行在 OpenJDK 容器内部，其底层的 Java JVM TrustStore（`$JAVA_HOME/lib/security/cacerts`）默认仅包含全球主流公共 CA 根证书。
+  3. 虽然 GitLab 部署在同集群内并通过 Ingress 暴露，但由于自建环境中证书或者域名未在 JVM 中导入受信任根证书，Java 在发起 HTTPS API 调用（`GET /api/v4/projects/...`）时触发 PKIX 证书链校验阻断，导致 `gitlab4j` 客户端连接被拒。
+- **根因分析**：
+  Jenkins 容器环境下的 Java 运行时缺乏目标 GitLab 域名的受信任证书链，HTTPS 握手因安全校验策略失败，阻断了 GitLab 分支扫描与 Jenkinsfile 发现。
+- **解决方案**：
+  在 `jenkins/values.yaml.tpl` 中将 GitLab Server 的服务协议调整为集群内部 Ingress 兼容的 HTTP 协议：
+  ```yaml
             gitLabServers:
               servers:
                 - credentialsId: "gitlab-token"
@@ -340,37 +529,61 @@ terraform apply -auto-approve
                   serverUrl: "http://gitlab.${domain}"
                   hooksRootUrl: ""
   ```
-  淇敼鍚庯紝Jenkins 閫氳繃 HTTP 缁曡繃 JVM 閽堝鍩熷悕鐨勮瘉涔﹂摼鏍￠獙锛宍Branch Indexing` 鑳藉姣绾ц繛閫?GitLab API锛屾垚鍔熻瘑鍒苟鎷夊彇 `main` 涓?`dev` 鍒嗘敮锛屾祦姘寸嚎浠诲姟鑷姩灏辩华銆?
+  修改后，Jenkins 通过 HTTP 绕过 JVM 针对域名的证书链校验，`Branch Indexing` 能够毫秒级连通 GitLab API，成功识别并拉取 `main` 与 `dev` 分支，流水线任务自动就绪。
+
 ---
 
-### 闂鍗佸洓锛氭墽琛?`terraform destroy -auto-approve` 澶辫触涓庝腑鏂殑鍏ㄥ満鏅牴鍥犳帓鏌ヤ笌閬垮潙鎸囧崡
+### 问题十四：执行 `terraform destroy -auto-approve` 失败与中断的全场景根因排查与避坑指南
 
-- **鐜拌薄**锛?  鍦ㄦ墽琛岀幆澧冨叏閲忛攢姣佸懡浠?`terraform destroy -auto-approve` 鏃讹紝閮ㄥ垎鎵ц娴佺▼閬亣鎶ラ敊涓柇銆佹寕璧锋垨鑰呮湭鑳戒竴娆℃€у畬鍏ㄩ攢姣佷簯绔祫婧愶紝鎺у埗鍙拌緭鍑虹孩鑹查敊璇€?- **鎺掓煡杩囩▼涓庡缁存牴鍥犲垎鏋?*锛?  缁撳悎鑷姩鍖栭儴缃插疄鎴樻棩蹇椾笌缁堢鍘嗗彶鍥炴函锛屽鑷?`terraform destroy -auto-approve` 鎵ц澶辫触鐨勬牳蹇冭鍥犲寘鍚互涓嬪洓绫伙細
+- **现象**：
+  在执行环境全量销毁命令 `terraform destroy -auto-approve` 时，部分执行流程遭遇报错中断、挂起或者未能一次性完全销毁云端资源，控制台输出红色错误。
+- **排查过程与多维根因分析**：
+  结合自动化部署实战日志与终端历史回溯，导致 `terraform destroy -auto-approve` 执行失败的核心诱因包含以下四类：
 
-  #### 1. 鍛戒护杈撳叆鎷煎啓鎵嬭锛坄destory` 甯歌鎷煎啓闄烽槺锛?  - **閿欒琛ㄧ幇**锛?    ```text
+  #### 1. 命令输入拼写手误（`destory` 常见拼写陷阱）
+  - **错误表现**：
+    ```text
     Terraform has no command named "destory". Did you mean "destroy"?
     ```
-  - **鏍瑰洜**锛氶敭鐩樺揩閫熻緭鍏ユ椂瀹规槗灏嗗瓧姣?`r` 鍜?`o` 椤哄簭棰犲€掞紝鏁叉垚 `destory`銆俆erraform CLI 鏃犳硶璇嗗埆璇ュ懡浠わ紝鐩存帴閫€鍑轰笖鏈墽琛屼换浣曢攢姣佹搷浣溿€?
-  #### 2. PowerShell 绮樿创瀵艰嚧鐨勭幆澧冨彉閲忎涪澶辨垨缁绗︽寕璧?  - **閿欒琛ㄧ幇**锛?    鎺у埗鍙板嚭鐜?`>>` 澶氳绛夊緟绗﹀彿鎸傝捣锛屾垨鎶ラ敊 `env: : The term 'env:' is not recognized as the name of a cmdlet`锛涚揣鎺ョ潃杩愯 destroy 鏃舵姏鍑轰簯鍘傚晢 API 閴存潈澶辫触锛?    ```text
+  - **根因**：键盘快速输入时容易将字母 `r` 和 `o` 顺序颠倒，敲成 `destory`。Terraform CLI 无法识别该命令，直接退出且未执行任何销毁操作。
+
+  #### 2. PowerShell 粘贴导致的环境变量丢失或续行符挂起
+  - **错误表现**：
+    控制台出现 `>>` 多行等待符号挂起，或报错 `env: : The term 'env:' is not recognized as the name of a cmdlet`；紧接着运行 destroy 时抛出云厂商 API 鉴权失败：
+    ```text
     Error: [TencentCloudSDKError] Code=AuthFailure.SecretIdNotFound / SignatureFailure
     Error: error deleting DNS record: Authentication error (10000)
     ```
-  - **鏍瑰洜**锛?    - 鍦?Windows PowerShell 涓鏋滃崟琛屾湯灏惧甫鏈夊弽寮曞彿 `` ` ``锛孭owerShell 浼氬皢鍏朵綔涓轰唬鐮佲€滅画琛岀鈥濓紝瀵艰嚧鍛戒护鏈湡姝ｆ墽琛屽畬鎴愶紱
-    - 鑻ュ紑杈熶簡鏂扮殑 PowerShell 绐楀彛锛屽厛鍓嶅湪鏃х獥鍙ｄ腑閫氳繃 `$env:TF_VAR_...` 娉ㄥ叆鐨勫嚟鎹湪瀛愯繘绋嬩腑**宸蹭笉澶嶅瓨鍦?*锛?    - Terraform 鍦ㄧ己灏戝閮ㄤ紶鍏ュ彉閲忔椂锛屼細鑷姩鍥為€€浣跨敤 `variables.tf` 涓師浣滆€呯‖缂栫爜鐨勬棤鏁堝崰浣嶇锛堝 `Your Access ID`銆佸け鏁?Cloudflare Token锛夛紝瀵艰嚧璋冪敤鍒犻櫎 API 鏃跺洜韬唤璁よ瘉澶辫触鑰屼腑鏂€?
-  #### 3. 浜戝巶鍟嗗簳灞傜綉缁滆祫婧愬紓姝ラ噴鏀剧殑鏃跺簭绔炰簤锛坄ResourceInUse` 缁忓吀浜戝钩鍙扮己闄凤級
-  - **閿欒琛ㄧ幇**锛?    CVM 瀹炰緥姝ｅ湪閿€姣佽繃绋嬩腑锛屼絾鍚庣画缃戠粶璧勬簮锛圫ubnet銆丼ecurity Group銆乂PC锛夐攢姣佹姤閿欙細
+  - **根因**：
+    - 在 Windows PowerShell 中如果单行末尾带有反引号 `` ` ``，PowerShell 会将其作为代码“续行符”，导致命令未真正执行完成；
+    - 若开辟了新的 PowerShell 窗口，先前在旧窗口中通过 `$env:TF_VAR_...` 注入的凭据在子进程中**已不复存在**；
+    - Terraform 在缺少外部传入变量时，会自动回退使用 `variables.tf` 中原作者硬编码的无效占位符（如 `Your Access ID`、失效 Cloudflare Token），导致调用删除 API 时因身份认证失败而中断。
+
+  #### 3. 云厂商底层网络资源异步释放的时序竞争（`ResourceInUse` 经典云平台缺陷）
+  - **错误表现**：
+    CVM 实例正在销毁过程中，但后续网络资源（Subnet、Security Group、VPC）销毁报错：
     ```text
     Error: [TencentCloudSDKError] Code=ResourceInUse.SubnetNotEmpty, Message=The subnet contains resources
     Error: [TencentCloudSDKError] Code=ResourceInUse.SecurityGroupInUse, Message=Security group is still associated with network interface / instance
     Error: [TencentCloudSDKError] Code=ResourceInUse.VpcNotEmpty, Message=VPC contains subnets or route tables
     ```
-  - **鏍瑰洜**锛?    - 鑵捐浜?CVM 瀹炰緥鍦ㄦ帴鏀跺埌閿€姣佽姹傚悗锛屼簯骞冲彴搴曞眰鐨勭敓鍛藉懆鏈熶负锛歚SHUTDOWN` -> `TERMINATING` -> `TERMINATED`銆?    - 瀹炰緥浠庡彂璧风粓姝㈠埌搴曞眰瑙ｇ粦骞跺畬鍏ㄩ噴鏀惧脊鎬х綉鍗★紙ENI锛変笌鍐呯綉 IP锛屽瓨鍦?**10~30 绉掔殑鐗╃悊寮傛寤惰繜**銆?    - 铏界劧 Terraform 浠ｇ爜涓畾涔変簡渚濊禆鎷撴墤锛屼絾鍦ㄥ疄渚?API 鍒氳繑鍥為攢姣佸姩浣溿€佸簳灞傜綉鍗″皻鏈畬鍏ㄨВ缁戞椂锛孴erraform 渚垮紑濮嬪皾璇曞苟鍙戝垹闄ょ粦瀹氱殑瀛愮綉鎴栧畨鍏ㄧ粍锛屼簯骞冲彴搴曞眰鍒ゅ畾鈥滃瓙缃戝唴浠嶆湁鍗犵敤瀵硅薄鈥濅粠鑰岄樆鏂垹闄ゃ€?
-  #### 4. 璺ㄥ鍏綉杩炴帴 Cloudflare API 瓒呮椂涓庢姈鍔?  - **閿欒琛ㄧ幇**锛?    ```text
+  - **根因**：
+    - 腾讯云 CVM 实例在接收到销毁请求后，云平台底层的生命周期为：`SHUTDOWN` -> `TERMINATING` -> `TERMINATED`。
+    - 实例从发起终止到底层解绑并完全释放弹性网卡（ENI）与内网 IP，存在 **10~30 秒的物理异步延迟**。
+    - 虽然 Terraform 代码中定义了依赖拓扑，但在实例 API 刚返回销毁动作、底层网卡尚未完全解绑时，Terraform 便开始尝试并发删除绑定的子网或安全组，云平台底层判定“子网内仍有占用对象”从而阻断删除。
+
+  #### 4. 跨境公网连接 Cloudflare API 超时与抖动
+  - **错误表现**：
+    ```text
     Error: error deleting DNS record: ... context deadline exceeded
     Error: connection reset by peer
     ```
-  - **鏍瑰洜**锛氭湰鍦扮綉缁滅洿杩?Cloudflare 浜氬お鑺傜偣鏃惰嫢鍑虹幇缃戠粶鎶栧姩鎴栦涪鍖咃紝瀵艰嚧 7 鏉?DNS 璁板綍涓殑鏌愪竴鏉¤姹傝秴鏃跺け璐ャ€?
-- **鏍规湰瑙ｅ喅鏂规涓庣ǔ鍋ラ攢姣佽鑼?*锛?  1. **鏈湴鍑嵁鍥哄寲锛堟帹鑽愬仛娉曪級**锛?     灏嗚吘璁簯涓?Cloudflare 瀵嗛挜姘镐箙鍐欏叆椤圭洰鏍圭洰褰曚笅鐨?`terraform.tfvars`锛?     ```hcl
+  - **根因**：本地网络直连 Cloudflare 亚太节点时若出现网络抖动或丢包，导致 7 条 DNS 记录中的某一条请求超时失败。
+
+- **根本解决方案与稳健销毁规范**：
+  1. **本地凭据固化（推荐做法）**：
+     将腾讯云与 Cloudflare 密钥永久写入项目根目录下的 `terraform.tfvars`：
+     ```hcl
      secret_id          = "YOUR_TENCENTCLOUD_SECRET_ID"
      secret_key         = "YOUR_TENCENTCLOUD_SECRET_KEY"
      cloudflare_api_key = "YOUR_CLOUDFLARE_API_KEY"
@@ -378,21 +591,38 @@ terraform apply -auto-approve
      prefix             = "devops"
      instance_charge_type = "SPOTPAID"
      ```
-     濡傛涓€鏉ワ紝鏃犺鍦ㄥ摢涓粓绔€佹棤璁烘槸鍚﹂噸鍚獥鍙ｏ紝Terraform 浼氳嚜鍔ㄤ紭鍏堝姞杞藉綋鍓嶇洰褰曠殑 `terraform.tfvars`锛屾案涓嶄涪澶辫璇佸嚟鎹€?  2. **鍋跺彂鏃跺簭绔炴€佺殑骞傜瓑閲嶈瘯锛圛dempotent Destroy锛?*锛?     鑻ラ亣鍒?`ResourceInUse.SubnetNotEmpty` 鎴栫綉缁滆秴鏃讹紝**鍒囧嬁鎵嬪姩鍦ㄦ帶鍒跺彴娣蜂贡骞查**锛屽彧闇€闈欏緟 **15~30 绉?*锛堢瓑寰呬簯骞冲彴寮傛瑙ｇ粦缃戝崱瀹屾垚锛夛紝鍦ㄥ師宸ョ▼鐩綍涓嬪啀娆℃墽琛屼竴娆★細
+     如此一来，无论在哪个终端、无论是否重启窗口，Terraform 会自动优先加载当前目录的 `terraform.tfvars`，永不丢失认证凭据。
+  2. **偶发时序竞态的幂等重试（Idempotent Destroy）**：
+     若遇到 `ResourceInUse.SubnetNotEmpty` 或网络超时，**切勿手动在控制台混乱干预**，只需静待 **15~30 秒**（等待云平台异步解绑网卡完成），在原工程目录下再次执行一次：
      ```bash
      terraform destroy -auto-approve
      ```
-     Terraform 鍏峰澶╃劧鐨勫箓绛夋€т笌鐘舵€佽窡韪兘鍔涳紝浼氳鍙栨湰鍦?`.tfstate` 浠呮竻鐞嗗墿浣欐湭閲婃斁鐨勭綉缁滀笌 DNS 璧勬簮锛屼簩娆℃墽琛屽繀瀹?100% 鎴愬姛銆?  3. **閿€姣佸畬鎴愮殑缁堟€侀獙璇?*锛?     - 鎵ц瀹屾垚鍚庤緭鍑猴細`Destroy complete! Resources: 29 destroyed.`锛?     - 鏈湴 `terraform.tfstate` 璁板綍搴旀竻绌轰负 `resources: []`锛?     - 鍙€氳繃 `terraform plan` 楠岃瘉锛岃嫢鎻愮ず `Plan: 29 to add, 0 to change, 0 to destroy.`锛岃鏄庝簯绔墍鏈変粯璐硅祫婧愬凡瀹屽叏褰诲簳娓呯┖銆?
----
+     Terraform 具备天然的幂等性与状态跟踪能力，会读取本地 `.tfstate` 仅清理剩余未释放的网络与 DNS 资源，二次执行必定 100% 成功。
+  3. **销毁完成的终态验证**：
+     - 执行完成后输出：`Destroy complete! Resources: 29 destroyed.`；
+     - 本地 `terraform.tfstate` 记录应清空为 `resources: []`；
+     - 可通过 `terraform plan` 验证，若提示 `Plan: 29 to add, 0 to change, 0 to destroy.`，说明云端所有付费资源已完全彻底清空。
 
 ---
 
-### 闂鍗佷簲锛欽enkins Agent Pod Git 妫€鍑鸿嚜绛惧悕璇佷功闃绘柇锛坄server certificate verification failed`锛?
-- **鐜拌薄**锛?  鍦?Jenkins MultiBranch Pipeline 鍚姩鍚庯紝璋冨害鍔ㄦ€?Kubernetes Agent Pod 鎵ц婧愮爜妫€鍑洪樁娈垫椂澶辫触锛屾帶鍒跺彴鎶ラ敊锛?  ```text
+---
+
+### 问题十五：Jenkins Agent Pod Git 检出自签名证书阻断（`server certificate verification failed`）
+
+- **现象**：
+  在 Jenkins MultiBranch Pipeline 启动后，调度动态 Kubernetes Agent Pod 执行源码检出阶段时失败，控制台报错：
+  ```text
   fatal: unable to access 'https://gitlab.devops.example.com/root/camp-go-example.git/': server certificate verification failed. CAfile: none CRLfile: none
   ```
-- **鎺掓煡杩囩▼**锛?  1. 妫€鏌?Jenkinsfile 骞舵病鏈夋樉寮忓啓 `git clone`锛屾簮鐮佹鍑烘槸鐢?Jenkins Pipeline 寮曟搸鍦ㄥ０鏄庡紡娴佹按绾垮惎鍔ㄦ椂鐢卞唴閮?`checkout scm` 鑷姩鍖栨墽琛岀殑锛?  2. 澹版槑寮忔祦姘寸嚎鐨?SCM 妫€鍑洪粯璁よ繍琛屽湪 Kubernetes Agent Pod 鐨?`jnlp` 瀹瑰櫒涓紱
-  3. 灏界 Ingress 涓婂凡缁戝畾鑷缓璇佷功锛屼絾 Agent 鍩虹闀滃儚绯荤粺鏍硅瘉涔﹀簱涓嶅寘鍚鑷鍚?CA锛屽鑷寸郴缁熺殑 `git` CLI 鍦ㄥ彂璧?HTTPS 璇锋眰鏃跺洜瀹夊叏鏍￠獙涓ユ牸闃绘柇銆?- **鏍瑰洜鍒嗘瀽**锛?  Jenkins 鍔ㄦ€?Agent Pod 鍐呴儴缂哄皯 GitLab 鍩熷悕鐨勫彈淇′换 CA 璇佷功锛屼笖 SCM 鑷姩妫€鍑烘槸鐢?Jenkins Agent 鍏ㄥ眬杩涚▼鍙戣捣锛屾棤娉曞崟鐙湪鍗曚釜 shell 姝ラ涓缃眬閮ㄧ幆澧冨彉閲忋€?- **瑙ｅ喅鏂规**锛?  鍦?Jenkins JCasC锛圝enkins Configuration as Code锛夊叏灞€閰嶇疆涓敞鍏ュ叏灞€鑺傜偣鐜鍙橀噺 `GIT_SSL_NO_VERIFY=true`锛?  鍦?`jenkins/values.yaml.tpl` 鐨?`controller.JCasC.configScripts.welcome-message` 涓ˉ鍏咃細
+- **排查过程**：
+  1. 检查 Jenkinsfile 并没有显式写 `git clone`，源码检出是由 Jenkins Pipeline 引擎在声明式流水线启动时由内部 `checkout scm` 自动化执行的；
+  2. 声明式流水线的 SCM 检出默认运行在 Kubernetes Agent Pod 的 `jnlp` 容器中；
+  3. 尽管 Ingress 上已绑定自建证书，但 Agent 基础镜像系统根证书库不包含该自签名 CA，导致系统的 `git` CLI 在发起 HTTPS 请求时因安全校验严格阻断。
+- **根因分析**：
+  Jenkins 动态 Agent Pod 内部缺少 GitLab 域名的受信任 CA 证书，且 SCM 自动检出是由 Jenkins Agent 全局进程发起，无法单独在单个 shell 步骤中设置局部环境变量。
+- **解决方案**：
+  在 Jenkins JCasC（Jenkins Configuration as Code）全局配置中注入全局节点环境变量 `GIT_SSL_NO_VERIFY=true`：
+  在 `jenkins/values.yaml.tpl` 的 `controller.JCasC.configScripts.welcome-message` 中补充：
   ```yaml
   jenkins:
     globalNodeProperties:
@@ -401,71 +631,113 @@ terraform apply -auto-approve
             - key: "GIT_SSL_NO_VERIFY"
               value: "true"
   ```
-  璁剧疆鍚庯紝鎵€鏈夊姩鎬?Agent 瀹瑰櫒涓殑 git 瀹㈡埛绔叏灞€璺宠繃鑷鍚嶈瘉涔︽牎楠岋紝浠ｇ爜妫€鍑烘绉掔骇鎴愬姛銆?
+  设置后，所有动态 Agent 容器中的 git 客户端全局跳过自签名证书校验，代码检出毫秒级成功。
+
 ---
 
-### 闂鍗佸叚锛欸rype 瀹瑰櫒闀滃儚婕忔礊鏁版嵁搴撹繃鏈熸牎楠屾嫤鎴紙`database was built 28 weeks ago`锛?
-- **鐜拌薄**锛?  娴佹按绾胯繘鍏?`Scan Image with Grype` 闃舵鏃舵墽琛屽け璐ワ紝缁堢杈撳嚭锛?  ```text
+### 问题十六：Grype 容器镜像漏洞数据库过期校验拦截（`database was built 28 weeks ago`）
+
+- **现象**：
+  流水线进入 `Scan Image with Grype` 阶段时执行失败，终端输出：
+  ```text
   [grype] 2026-09-26T10:07:30Z [ERROR] db could not be loaded: the vulnerability database was built 28 weeks ago (max allowed age is 5 days). To use anyway, set GRYPE_DB_MAX_ALLOWED_BUILT_AGE=87600h
   ```
-- **鎺掓煡杩囩▼**锛?  1. 妫€鏌ヨ浠朵娇鐢ㄧ殑 Grype 闀滃儚锛歚lyzhang1999/grype:latest@sha256:ca4ff9625f632d3a5e686089f4fa88068f5aa5cc8fa7d49115397f035f04e65a`锛?  2. 璇ラ暅鍍忔墦鍖呭唴缃簡绂荤嚎婕忔礊鏁版嵁搴擄紙渚夸簬鍐呯綉鏁欏鏃犻渶瀹炴椂浠?GitHub 涓嬭浇涓婄櫨鍏嗘紡娲炲簱锛夛紝浣?Grype 瀹㈡埛绔唴閮ㄥ甫鏈夐粯璁ゅ畨鍏ㄧ‖鎬т繚鎶よ鍒欙細绂荤嚎鏁版嵁搴撴瀯寤烘椂闂磋秴杩?5 澶╁嵆鍒ゅ畾涓衡€滀弗閲嶈繃鏈熲€濓紝鎷掔粷鎵ц瀹夊叏鎵弿锛?  3. 鐢变簬璇句欢闀滃儚鎵撳寘鏃堕棿杈冩棭锛屾瀯寤烘椂闂村凡杈炬暟鍗佸懆锛岀洿鎺ヨЕ鍙戞牎楠岄樆鏂€?- **鏍瑰洜鍒嗘瀽**锛?  Grype 瀹樻柟榛樿鐨勯槻寰℃€х瓥鐣ラ檺鍒朵簡绂荤嚎搴撶殑鍙敤鐢熷懡鍛ㄦ湡锛坄max allowed age is 5 days`锛夛紝鏈厤缃斁琛岃鍒欏鑷村鍣ㄥ唴鎵弿鍛戒护寮傚父涓柇閫€鍑恒€?- **瑙ｅ喅鏂规**锛?  鍦ㄨ皟鐢?Grype 鎵ц鎵弿鏃讹紝閫氳繃鐜鍙橀噺娉ㄥ叆绂佺敤鑷姩鏇存柊骞舵斁瀹芥暟鎹簱鐢熷懡鍛ㄦ湡鍏佽闃堝€硷紙璁剧疆涓?10 骞达級锛?  ```bash
+- **排查过程**：
+  1. 检查课件使用的 Grype 镜像：`lyzhang1999/grype:latest@sha256:ca4ff9625f632d3a5e686089f4fa88068f5aa5cc8fa7d49115397f035f04e65a`；
+  2. 该镜像打包内置了离线漏洞数据库（便于内网教学无需实时从 GitHub 下载上百兆漏洞库），但 Grype 客户端内部带有默认安全硬性保护规则：离线数据库构建时间超过 5 天即判定为“严重过期”，拒绝执行安全扫描；
+  3. 由于课件镜像打包时间较早，构建时间已达数十周，直接触发校验阻断。
+- **根因分析**：
+  Grype 官方默认的防御性策略限制了离线库的可用生命周期（`max allowed age is 5 days`），未配置放行规则导致容器内扫描命令异常中断退出。
+- **解决方案**：
+  在调用 Grype 执行扫描时，通过环境变量注入禁用自动更新并放宽数据库生命周期允许阈值（设置为 10 年）：
+  ```bash
   GRYPE_DB_MAX_ALLOWED_BUILT_AGE=87600h GRYPE_DB_AUTO_UPDATE=false grype /home/jenkins/agent/image.tar --fail-on critical
   ```
-  鍦?`init.sh.tpl` 涓€氳繃 `sed` 鍛戒护瀵瑰厠闅嗙殑椤圭洰 `Jenkinsfile` 鍥哄寲淇琛ヤ竵锛?  ```bash
+  在 `init.sh.tpl` 中通过 `sed` 命令对克隆的项目 `Jenkinsfile` 固化修复补丁：
+  ```bash
   sed -i 's|grype /home/jenkins/agent/image.tar --fail-on critical|GRYPE_DB_MAX_ALLOWED_BUILT_AGE=87600h GRYPE_DB_AUTO_UPDATE=false grype /home/jenkins/agent/image.tar --fail-on critical|g' Jenkinsfile
   ```
-  淇鍚庯紝Grype 鑳芥甯稿姞杞介暅鍍忓唴缃绾垮簱瀵瑰鍣ㄩ暅鍍忚繘琛屾紡娲為潤鎬佸垎鏋愶紝骞跺湪鏃?Critical 婕忔礊鏃舵甯告斁琛岃繘鍏ヤ笅涓€闃舵銆?
+  修复后，Grype 能正常加载镜像内置离线库对容器镜像进行漏洞静态分析，并在无 Critical 漏洞时正常放行进入下一阶段。
+
 ---
 
-### 闂鍗佷竷锛欻arbor Content Trust 瀵艰嚧鐨勬湭缁忕鍚嶉暅鍍忔帹閫佹閿侊紙`412 Precondition Failed`锛?
-- **鐜拌薄**锛?  鍦?`Crane Push Docker Image` 闃舵鎺ㄩ€佸埌 Harbor锛屾垨鑰呭湪 `Cosign Image` 闃舵瀵瑰垰鎺ㄩ€佺殑闀滃儚绛惧悕鏃讹紝鎺у埗鍙版姏鍑?HTTP 412 閿欒锛?  ```text
+### 问题十七：Harbor Content Trust 导致的未经签名镜像推送死锁（`412 Precondition Failed`）
+
+- **现象**：
+  在 `Crane Push Docker Image` 阶段推送到 Harbor，或者在 `Cosign Image` 阶段对刚推送的镜像签名时，控制台抛出 HTTP 412 错误：
+  ```text
   Error: signing [harbor.devops.example.com/example/camp-go-example:...]: accessing entity: Get "https://harbor.../v2/example/camp-go-example/manifests/...": 412 Precondition Failed: The image is not signed by cosign
   ```
-- **鎺掓煡杩囩▼**锛?  1. 鏌ョ湅 Harbor API 涓庨」鐩厤缃細`GET /api/v2.0/projects/example`锛?  2. 鍙戠幇 `metadata.enable_content_trust_cosign` 瀛楁琚厤缃负浜?`"true"`锛屽苟涓?`prevent_vul` 涔熼厤缃负浜?`"true"`锛?  3. 褰撳紑鍚簡鈥滀粎鍏佽宸茬鍚嶉暅鍍忥紙Content Trust锛夆€濅箣鍚庯紝Harbor 鐨勫弽鍚戜唬鐞嗗眰浼氬璇ラ」鐩笅鎵€鏈夌殑 Manifest 璇诲彇锛坄HEAD` / `GET`锛夊己琛岃繘琛岀鍚嶉獙璇佹嫤鎴紱
-  4. 鏂版瀯寤虹殑闀滃儚鍒氬垰琚?push 鍒?Harbor锛屽皻鏈墽琛?`cosign sign`锛屽叾鏈韩澶勪簬鈥滄湭绛惧悕鈥濈姸鎬侊紱
-  5. 姝ゆ椂瀹㈡埛绔湪纭鎺ㄩ€佺粨鏋滄垨 Cosign 宸ュ叿鍦ㄥ皾璇曡鍙?Manifest 鍑嗗璁＄畻鎽樿绛惧悕鏃讹紝Harbor 鐩存帴杩斿洖 412 閿欒闃绘柇锛屽舰鎴愪簡缁忓吀鐨勨€滄湭绛惧悕闀滃儚鍥犵己灏戠鍚嶈鎷︽埅锛岃繘鑰屾棤娉曠鍚嶁€濈殑**楦＄敓铔嬫閿侊紙Deadlock锛?*銆?- **鏍瑰洜鍒嗘瀽**锛?  椤圭洰绾у唴瀹逛俊浠荤瓥鐣ワ紙Content Trust锛変笌婕忔礊闃绘绛栫暐灞炰簬鈥滄秷璐逛晶闂ㄧ鈥濓紝鑻ュ湪鐢熶骇鍙戝竷閾捐矾涓己琛屽紑鍚湪鏋勫缓鎺ㄩ€侀樁娈碉紝浼氬鑷存墍鏈夊垵濮嬩笂浼犵殑闀滃儚琚竴绁ㄥ惁鍐炽€?- **瑙ｅ喅鏂规**锛?  璋冪敤 Harbor REST API 璋冩暣椤圭洰 `metadata`锛屽皢闃绘柇绛栫暐璋冩暣涓哄悎瑙勬ā寮忥細
+- **排查过程**：
+  1. 查看 Harbor API 与项目配置：`GET /api/v2.0/projects/example`；
+  2. 发现 `metadata.enable_content_trust_cosign` 字段被配置为了 `"true"`，并且 `prevent_vul` 也配置为了 `"true"`；
+  3. 当开启了“仅允许已签名镜像（Content Trust）”之后，Harbor 的反向代理层会对该项目下所有的 Manifest 读取（`HEAD` / `GET`）强行进行签名验证拦截；
+  4. 新构建的镜像刚刚被 push 到 Harbor，尚未执行 `cosign sign`，其本身处于“未签名”状态；
+  5. 此时客户端在确认推送结果或 Cosign 工具在尝试读取 Manifest 准备计算摘要签名时，Harbor 直接返回 412 错误阻断，形成了经典的“未签名镜像因缺少签名被拦截，进而无法签名”的**鸡生蛋死锁（Deadlock）**。
+- **根因分析**：
+  项目级内容信任策略（Content Trust）与漏洞阻止策略属于“消费侧门禁”，若在生产发布链路中强行开启在构建推送阶段，会导致所有初始上传的镜像被一票否决。
+- **解决方案**：
+  调用 Harbor REST API 调整项目 `metadata`，将阻断策略调整为合规模式：
   ```bash
   curl -s -k -X PUT "https://harbor.${domain}/api/v2.0/projects/${harbor_registry}" \
       -H 'content-type: application/json' \
       -u admin:${harbor_password} \
       --data-raw '{"metadata":{"public":"false","enable_content_trust":"false","enable_content_trust_cosign":"false","prevent_vul":"false","severity":"critical","auto_scan":"true","reuse_sys_cve_allowlist":"true"}}'
   ```
-  鍦?`init.sh.tpl` 绗?307 琛屽皢鍒濆閰嶇疆鍥哄寲涓?`enable_content_trust_cosign: false`锛屽交搴曟秷闄ゆ祦姘寸嚎姝婚攣銆?
+  在 `init.sh.tpl` 第 307 行将初始配置固化为 `enable_content_trust_cosign: false`，彻底消除流水线死锁。
+
 ---
 
-### 闂鍗佸叓锛欳osign 闀滃儚绛惧悕鑷鍚嶈瘉涔﹂樆鏂笌鏃犻檺杞鍗℃锛坄tls: failed to verify certificate`锛?
-- **鐜拌薄**锛?  娴佹按绾胯繘鍏?`Cosign Image` 闃舵鍚庯紝鎺у埗鍙版寔缁緭鍑哄涓嬫姤閿欏苟鏃犻檺寰幆锛屼换鍔℃案涓嶇粨鏉燂細
+### 问题十八：Cosign 镜像签名自签名证书阻断与无限轮询卡死（`tls: failed to verify certificate`）
+
+- **现象**：
+  流水线进入 `Cosign Image` 阶段后，控制台持续输出如下报错并无限循环，任务永不结束：
   ```text
   Error: signing [harbor.devops.example.com/example/camp-go-example:main-...]: accessing entity: Get "https://harbor.../v2/": tls: failed to verify certificate: x509: certificate is valid for ingress.local, not harbor.devops.example.com
   Waiting for harbor scan image
   Error: signing [...] tls: failed to verify certificate: x509: certificate is valid for ingress.local
   Waiting for harbor scan image
   ```
-- **鎺掓煡杩囩▼**锛?  1. 妫€鏌?`Jenkinsfile` 涓?Cosign 姝ラ鐨勫疄鐜帮細
+- **排查过程**：
+  1. 检查 `Jenkinsfile` 中 Cosign 步骤的实现：
      ```groovy
      until COSIGN_PASSWORD=$COSIGN_KEY_PASSWORD cosign sign --key /root/cosign.key $BUILD_IMAGE -y; do
          echo "Waiting for harbor scan image"
      done
      ```
-  2. 鍘熶綔鑰呯紪鍐欎簡 `until ...; do ... done` 杞閲嶈瘯閫昏緫锛屽師鎰忔槸绛夊緟 Harbor 鍚庡彴寮傛鎵弿锛屼絾寰幆浣撳唴閮?*鏈鍔犱换浣?sleep 寤舵椂**锛?  3. 闆嗙兢鍐呴儴 Harbor 鐢?Ingress 鏆撮湶锛屼娇鐢ㄧ殑鏄泦缇ゅ唴閮ㄨ嚜绛惧悕鐨?`ingress.local` 璇佷功锛?  4. 绱ф帴鐫€鍓嶉潰鐨?`crane push` 涓?`crane tag` 閮芥樉寮忓姞涓婁簡 `--insecure` 鍙傛暟缁曡繃浜嗚瘉涔︽牎楠岋紝鑰屽師鐗?`cosign sign` 鍛戒护**閬楁紡浜嗛拡瀵逛笉瀹夊叏闀滃儚浠撳簱鐨勬斁琛屽弬鏁?*锛?  5. Cosign 鍦ㄥ彂璧?TLS 鎻℃墜鏃跺垽瀹氳瘉涔﹀煙鍚嶄笉鍖归厤锛岀珛鍗充互闈?0 鐘舵€佺爜閫€鍑猴紝瑙﹀彂 `until` 闄峰叆姣忕鎴愮櫨涓婂崈娆＄殑楂橀姝诲惊鐜紝鎵撴弧 Jenkins 鎺у埗鍙版棩蹇椼€?- **鏍瑰洜鍒嗘瀽**锛?  `cosign sign` 缂哄皯 `--allow-insecure-registry=true` 鏍囧織锛屾棤娉曚笌鑷缓鑷鍚嶈瘉涔︾殑 Harbor 浠撳簱瀹屾垚 TLS 浜や簰銆?- **瑙ｅ喅鏂规**锛?  涓?`cosign sign` 澧炲姞 `--allow-insecure-registry=true`锛屽苟鍦ㄨ疆璇㈤噸璇曚綋鍐呭鍔?`sleep 2` 瀹夊叏閫€閬匡細
+  2. 原作者编写了 `until ...; do ... done` 轮询重试逻辑，原意是等待 Harbor 后台异步扫描，但循环体内部**未增加任何 sleep 延时**；
+  3. 集群内部 Harbor 由 Ingress 暴露，使用的是集群内部自签名的 `ingress.local` 证书；
+  4. 紧接着前面的 `crane push` 与 `crane tag` 都显式加上了 `--insecure` 参数绕过了证书校验，而原版 `cosign sign` 命令**遗漏了针对不安全镜像仓库的放行参数**；
+  5. Cosign 在发起 TLS 握手时判定证书域名不匹配，立即以非 0 状态码退出，触发 `until` 陷入每秒成百上千次的高频死循环，打满 Jenkins 控制台日志。
+- **根因分析**：
+  `cosign sign` 缺少 `--allow-insecure-registry=true` 标志，无法与自建自签名证书的 Harbor 仓库完成 TLS 交互。
+- **解决方案**：
+  为 `cosign sign` 增加 `--allow-insecure-registry=true`，并在轮询重试体内增加 `sleep 2` 安全退避：
   ```groovy
   until COSIGN_PASSWORD=$COSIGN_KEY_PASSWORD cosign sign --allow-insecure-registry=true --key /root/cosign.key $BUILD_IMAGE -y; do
       echo "Waiting for harbor scan image"
       sleep 2
   done
   ```
-  鍦?`init.sh.tpl` 涓€氳繃 `sed` 鑷姩娉ㄥ叆锛?  ```bash
+  在 `init.sh.tpl` 中通过 `sed` 自动注入：
+  ```bash
   sed -i 's|cosign sign --key /root/cosign.key|cosign sign --allow-insecure-registry=true --key /root/cosign.key|g' Jenkinsfile
   sed -i 's|echo "Waiting for harbor scan image"|echo "Waiting for harbor scan image"; sleep 2|g' Jenkinsfile
   ```
-  淇敼鍚庯紝Cosign 浠呴渶 1 绉掑嵆鍙绾у畬鎴愬叕绉侀挜绛惧悕锛屽苟灏?OCI Signature 闄勪欢鎺ㄩ€佸埌 Harbor銆?
+  修改后，Cosign 仅需 1 秒即可秒级完成公私钥签名，并将 OCI Signature 附件推送到 Harbor。
+
 ---
 
-### 闂鍗佷節锛欰rgo CD ApplicationSet Controller 璁块棶鑷缓 GitLab 璇佷功闃绘柇锛坄server certificate verification failed`锛?
-- **鐜拌薄**锛?  鎵ц `kubectl get applicationset -A` 鍙戠幇鐘舵€佸嚭鐜扮孩鑹茬殑 `ApplicationGenerationFromParamsError`锛?  ```text
+### 问题十九：Argo CD ApplicationSet Controller 访问自建 GitLab 证书阻断（`server certificate verification failed`）
+
+- **现象**：
+  执行 `kubectl get applicationset -A` 发现状态出现红色的 `ApplicationGenerationFromParamsError`：
+  ```text
   Error during fetching repo: `git fetch origin HEAD --tags --force --prune` failed exit status 128: fatal: unable to access 'https://gitlab.devops.example.com/root/camp-go-example-helm.git/': server certificate verification failed. CAfile: none CRLfile: none
   ```
-  瀵艰嚧 Argo CD 鏃犳硶鑷姩鏍规嵁 Helm 浠撳簱鐜妯℃澘鍙戠幇 `dev` 涓?`main` 搴旂敤锛宍kubectl get applications -n argocd` 杩斿洖绌哄垪琛ㄣ€?- **鎺掓煡杩囩▼**锛?  1. 妫€鏌?`argocd/repo-secret.yaml`锛屽彂鐜板師瀹氫箟涓猴細
+  导致 Argo CD 无法自动根据 Helm 仓库环境模板发现 `dev` 与 `main` 应用，`kubectl get applications -n argocd` 返回空列表。
+- **排查过程**：
+  1. 检查 `argocd/repo-secret.yaml`，发现原定义为：
      ```yaml
      apiVersion: v1
      kind: Secret
@@ -480,7 +752,13 @@ terraform apply -auto-approve
        password: ...
        username: root
      ```
-  2. Argo CD 鐨?ApplicationSet Controller 涓?Repo Server 鍚屾牱杩愯鍦ㄧ嫭绔?Pod 涓紝鍐呴儴 git 瀹㈡埛绔粯璁や弗鏍兼牎楠岀洰鏍?GitLab 鐨?HTTPS 璇佷功锛?  3. 鐢变簬鑷缓 Ingress 璇佷功涓鸿嚜绛惧悕锛実it 鏍￠獙澶辫触锛屾嫆缁濇媺鍙?Helm 妯℃澘锛屽鑷?Application 鐢熸垚鍣ㄤ腑鏂€?- **鏍瑰洜鍒嗘瀽**锛?  Argo CD 浠撳簱鍑嵁鏈０鏄庤烦杩?TLS 鏍￠獙锛岀己灏?`insecure: "true"` 涓庢槑纭殑 `repository` 绫诲瀷鏍囩銆?- **瑙ｅ喅鏂规**锛?  鍦?`repo-secret.yaml` 涓鍔?`insecure: "true"` 骞跺湪 labels 涓厤缃负 `argocd.argoproj.io/secret-type: repository`锛?  ```yaml
+  2. Argo CD 的 ApplicationSet Controller 与 Repo Server 同样运行在独立 Pod 中，内部 git 客户端默认严格校验目标 GitLab 的 HTTPS 证书；
+  3. 由于自建 Ingress 证书为自签名，git 校验失败，拒绝拉取 Helm 模板，导致 Application 生成器中断。
+- **根因分析**：
+  Argo CD 仓库凭据未声明跳过 TLS 校验，缺少 `insecure: "true"` 与明确的 `repository` 类型标签。
+- **解决方案**：
+  在 `repo-secret.yaml` 中增加 `insecure: "true"` 并在 labels 中配置为 `argocd.argoproj.io/secret-type: repository`：
+  ```yaml
   apiVersion: v1
   kind: Secret
   metadata:
@@ -496,25 +774,38 @@ terraform apply -auto-approve
     username: root
     insecure: "true"
   ```
-  鍦?`init.sh.tpl` 涓€氳繃 `yq` 杩涜鍥哄寲鏇存柊锛?  ```bash
+  在 `init.sh.tpl` 中通过 `yq` 进行固化更新：
+  ```bash
   GITLAB_PERSONAL_TOKEN="$personal_access_token" yq -i '.stringData.url = "https://gitlab.${domain}/root/${example_project_name}-helm.git" | .stringData.password = strenv(GITLAB_PERSONAL_TOKEN) | .stringData.insecure = "true" | .metadata.labels."argocd.argoproj.io/secret-type" = "repository"' /tmp/repo-secret.yaml
   ```
-  鏇存柊鍚庨噸鍚?Controller锛孉rgo CD 绔嬪嵆璇嗗埆鍒?`charts/env/*/values.yaml`锛岃嚜鍔ㄧ敓鎴?`dev` 鍜?`main` 涓や釜瀹屾暣 Application 骞惰嚜鍔ㄨ繘鍏ュ悓姝ャ€?
+  更新后重启 Controller，Argo CD 立即识别到 `charts/env/*/values.yaml`，自动生成 `dev` 和 `main` 两个完整 Application 并自动进入同步。
+
 ---
 
-### 闂浜屽崄锛欿3s 鑺傜偣鎷夊彇鑷缓 Harbor 闀滃儚鎶?`ErrImagePull / x509: certificate is valid for ingress.local`
+### 问题二十：K3s 节点拉取自建 Harbor 镜像报 `ErrImagePull / x509: certificate is valid for ingress.local`
 
-- **鐜拌薄**锛?  Argo CD 鍚屾鎴愬姛鍚庯紝K3s 鑺傜偣涓婄殑搴旂敤 Pod锛坄dev-podinfo`銆乣main-podinfo`锛夊嚭鐜?`ErrImagePull` / `ImagePullBackOff`锛?  ```text
+- **现象**：
+  Argo CD 同步成功后，K3s 节点上的应用 Pod（`dev-podinfo`、`main-podinfo`）出现 `ErrImagePull` / `ImagePullBackOff`：
+  ```text
   Failed to pull image "harbor.devops.example.com/example/camp-go-example:latest": failed to do request: Head "https://harbor.../v2/example/camp-go-example/manifests/latest": tls: failed to verify certificate: x509: certificate is valid for ingress.local, not harbor.devops.example.com
   ```
-- **鎺掓煡杩囩▼**锛?  1. 搴旂敤浣跨敤鐨勯暅鍍忓湴鍧€涓?`harbor.devops.example.com/example/camp-go-example:latest`锛?  2. 璇ュ煙鍚嶈В鏋愬湪鑺傜偣鏈満 Ingress锛岃繑鍥炵殑璇佷功鏄?Ingress 榛樿璇佷功锛圴alid for `ingress.local`锛夛紱
-  3. K3s 鍐呴儴杩愯鐨勫鍣ㄨ繍琛屾椂涓哄唴宓岀殑 `containerd`锛?  4. containerd 鍦ㄦ病鏈夋槑纭０鏄庡厑璁歌绉佹湁 Registry 蹇界暐 TLS 鏍￠獙鏃讹紝搴曞眰 Go crypto 搴撲弗鏍兼牎楠屽煙鍚嶅尮閰嶏紝鐩存帴鎷掔粷鎻℃墜鎷夊彇銆?- **鏍瑰洜鍒嗘瀽**锛?  K3s containerd 缂哄皯 `/etc/rancher/k3s/registries.yaml` 閰嶇疆鏂囦欢锛屾湭瀵规湰闆嗙兢鑷鍚?Harbor 鍩熷悕閰嶇疆 `insecure_skip_verify: true`銆?- **瑙ｅ喅鏂规**锛?  鍦?K3s 瀹夎鍓嶏紙鎴栧畨瑁呭悗锛夛紝鍒涘缓 `/etc/rancher/k3s/registries.yaml` 澹版槑璇?Harbor 闀滃儚浠撳簱蹇界暐璇佷功鏍￠獙锛?  ```yaml
+- **排查过程**：
+  1. 应用使用的镜像地址为 `harbor.devops.example.com/example/camp-go-example:latest`；
+  2. 该域名解析在节点本机 Ingress，返回的证书是 Ingress 默认证书（Valid for `ingress.local`）；
+  3. K3s 内部运行的容器运行时为内嵌的 `containerd`；
+  4. containerd 在没有明确声明允许该私有 Registry 忽略 TLS 校验时，底层 Go crypto 库严格校验域名匹配，直接拒绝握手拉取。
+- **根因分析**：
+  K3s containerd 缺少 `/etc/rancher/k3s/registries.yaml` 配置文件，未对本集群自签名 Harbor 域名配置 `insecure_skip_verify: true`。
+- **解决方案**：
+  在 K3s 安装前（或安装后），创建 `/etc/rancher/k3s/registries.yaml` 声明该 Harbor 镜像仓库忽略证书校验：
+  ```yaml
   configs:
     "harbor.devops.example.com":
       tls:
         insecure_skip_verify: true
   ```
-  骞跺湪 `init.sh.tpl` 鐨?`setup_k3s` 鍑芥暟鏈€鍓嶅垪鍥哄寲锛?  ```bash
+  并在 `init.sh.tpl` 的 `setup_k3s` 函数最前列固化：
+  ```bash
   setup_k3s() {
       echo "Installing/starting K3s..."
       sudo mkdir -p /etc/rancher/k3s
@@ -526,39 +817,44 @@ terraform apply -auto-approve
   EOF
       curl -sfL https://get.k3s.io | INSTALL_K3S_EXEC="server --tls-san ${public_ip} ...
   ```
-  閰嶇疆鐢熸晥鍚庯紝K3s containerd 绉掔骇鎷夊彇闀滃儚骞跺惎鍔ㄥ鍣紝鎵€鏈夌幆澧?Pod 100% 杈炬垚 `1/1 Running`銆?
+  配置生效后，K3s containerd 秒级拉取镜像并启动容器，所有环境 Pod 100% 达成 `1/1 Running`。
+
 ---
 
-## 鍥涖€佹湇鍔¤闂笌鍏ㄦ爤缁勪欢楠屾敹鎸囧崡
+## 四、服务访问与全栈组件验收指南
 
-閮ㄧ讲瀹屾垚鍚庯紝Terraform 灏嗚緭鍑哄叕缃?IP 涓庣櫥褰曞瘑鐮併€?
-### 4.1 鑺傜偣缃戠粶涓?Hosts 鏄犲皠閰嶇疆
+部署完成后，Terraform 将输出公网 IP 与登录密码。
 
-褰撳墠瀹炴垬闆嗙兢鍒嗛厤鐨勫熀纭€鍏綉 IP 淇℃伅濡備笅锛?*100% 绔炰环瀹炰緥 SPOTPAID**锛夛細
-- **K3s 闆嗙兢涓昏妭鐐癸紙鍚?Ingress Controller锛?*锛歚43.135.123.232`锛堟満鍨嬶細`S6.4XLARGE32`锛岀珵浠峰疄渚嬶級
-- **PostgreSQL 鏁版嵁搴撹妭鐐?*锛歚101.32.7.109`锛堟満鍨嬶細`S5.MEDIUM2`锛岀珵浠峰疄渚嬶級
+### 4.1 节点网络与 Hosts 映射配置
 
-鑻ュ湪鏈湴娴嬭瘯鏈В鏋愮殑绉佹湁娴嬭瘯鍩熷悕锛岃鍦ㄦ湰鍦版搷浣滅郴缁?Hosts 鏂囦欢涓坊鍔犲涓嬭В鏋愶細
+当前实战集群分配的基础公网 IP 信息如下（**100% 竞价实例 SPOTPAID**）：
+- **K3s 集群主节点（含 Ingress Controller）**：`<YOUR_K3S_NODE_PUBLIC_IP>`（机型：`S6.4XLARGE32`，竞价实例）
+- **PostgreSQL 数据库节点**：`<YOUR_PG_NODE_PUBLIC_IP>`（机型：`S5.MEDIUM2`，竞价实例）
+
+若在本地测试未解析的私有测试域名，请在本地操作系统 Hosts 文件中添加如下解析：
 ```text
-43.135.123.232 dev.podinfo.local
-43.135.123.232 main.podinfo.local
+<YOUR_K3S_NODE_PUBLIC_IP> dev.podinfo.local
+<YOUR_K3S_NODE_PUBLIC_IP> main.podinfo.local
 ```
 
-> **缃戠粶閬垮潙鎻愮ず**锛氳嫢鏈湴瀹㈡埛绔紑鍚簡 VPN 鎴栦唬鐞嗗伐鍏凤紙濡?Clash銆乂2Ray 绛夛級锛岃姹傝嚜瀹氫箟鍩熷悕鏃惰嫢閬亣瓒呮椂鎴?000 鐘舵€佺爜锛岃鍦ㄥ懡浠よ涓檮鍔?`--noproxy "*"` 鍙傛暟缁曡繃鏈湴浠ｇ悊鐩存帴杩炴帴銆?
-### 4.2 鍚勬牳蹇冨钩鍙拌闂竻鍗曚笌鐪熷疄璐﹀瘑
+> **网络避坑提示**：若本地客户端开启了 VPN 或代理工具（如 Clash、V2Ray 等），请求自定义域名时若遭遇超时或 000 状态码，请在命令行中附加 `--noproxy "*"` 参数绕过本地代理直接连接。
 
-| 骞冲彴缁勪欢 | 璁块棶鍗忚涓庡湴鍧€ | 榛樿鐢ㄦ埛鍚?| 榛樿瀵嗙爜 / 鐪熷疄鍑嵁 | 瀹炴祴鍋ュ悍鐘舵€?|
+### 4.2 各核心平台访问清单与真实账密
+
+| 平台组件 | 访问协议与地址 | 默认用户名 | 默认密码 / 真实凭据 | 实测健康状态 |
 | :--- | :--- | :--- | :--- | :--- |
-| **GitLab** | `https://gitlab.devops.example.com` | `root` | `YOUR_GITLAB_PASSWORD`<br>*(PAT: `YOUR_GITLAB_PAT`)* | **HTTP 302** (姝ｅ父閲嶅畾鍚戣嚦鐧诲綍椤? |
-| **Harbor** | `https://harbor.devops.example.com` | `admin` | `Harbor12345` | **HTTP 200** (API 涓?Web 鐣岄潰瀹屽叏姝ｅ父) |
-| **Jenkins** | `http://jenkins.devops.example.com` | `admin` | `password123` | **HTTP 200** (JCasC 娴佹按绾垮凡鎴愬姛杞藉叆) |
-| **SonarQube**| `http://sonar.devops.example.com` | `admin` | `password123` | **HTTP 200** (鏍稿績鐘舵€?`UP`) |
-| **Argo CD**  | `http://argocd.devops.example.com` | `admin` | `password123` | **HTTP 200** (JWT Session 绛惧彂姝ｅ父) |
-| **Grafana**  | `http://grafana.devops.example.com` | `admin` | `password123` | **HTTP 302** (姝ｅ父閲嶅畾鍚戣嚦鐧诲綍椤? |
-| **Prometheus**| `http://prometheus.devops.example.com`| *(鏃犻渶鐧诲綍)* | *(鏃犻渶瀵嗙爜)* | **HTTP 302** (Active Targets: 23/23 姝ｅ父) |
+| **GitLab** | `https://gitlab.devops.example.com` | `root` | `YOUR_GITLAB_PASSWORD`<br>*(PAT: `YOUR_GITLAB_PAT`)* | **HTTP 302** (正常重定向至登录页) |
+| **Harbor** | `https://harbor.devops.example.com` | `admin` | `Harbor12345` | **HTTP 200** (API 与 Web 界面完全正常) |
+| **Jenkins** | `http://jenkins.devops.example.com` | `admin` | `password123` | **HTTP 200** (JCasC 流水线已成功载入) |
+| **SonarQube**| `http://sonar.devops.example.com` | `admin` | `password123` | **HTTP 200** (核心状态 `UP`) |
+| **Argo CD**  | `http://argocd.devops.example.com` | `admin` | `password123` | **HTTP 200** (JWT Session 签发正常) |
+| **Grafana**  | `http://grafana.devops.example.com` | `admin` | `password123` | **HTTP 302** (正常重定向至登录页) |
+| **Prometheus**| `http://prometheus.devops.example.com`| *(无需登录)* | *(无需密码)* | **HTTP 302** (Active Targets: 23/23 正常) |
 
-### 4.3 闆嗙兢鍋ュ悍搴﹀叏璨岄獙璇佺粨鏋?
-鎵ц `kubectl get pods -A`锛岄泦缇ゅ叏鍛藉悕绌洪棿 Pod 杩愯鍋ュ悍搴﹁揪鍒?**100%**锛?
+### 4.3 集群健康度全貌验证结果
+
+执行 `kubectl get pods -A`，集群全命名空间 Pod 运行健康度达到 **100%**：
+
 ```text
 NAMESPACE     NAME                                                        READY   STATUS      RESTARTS      AGE
 argocd        argocd-application-controller-0                             1/1     Running     0             12m
@@ -621,40 +917,55 @@ sonarqube     sonarqube-sonarqube-change-admin-password-hook-9v9fw        0/1   
 
 ---
 
-## 浜斻€佺幆澧冩竻鐞嗕笌璧勬簮閿€姣?
-瀹為獙鎴栨紨绀哄畬鎴愬悗锛屽姟蹇呭強鏃堕攢姣佷簯璧勬簮浠ラ伩鍏嶄骇鐢熶笉蹇呰鐨勬寔缁墸璐癸細
+## 五、环境清理与资源销毁
+
+实验或演示完成后，务必及时销毁云资源以避免产生不必要的持续扣费：
 
 ```bash
 terraform destroy -auto-approve
 ```
 
-璇ュ懡浠ゅ皢鍏ㄨ嚜鍔ㄦ竻鐞嗭細
-1. 鑵捐浜戜笂鐨?2 鍙?CVM 浜戞湇鍔″櫒銆? 濂?VPC 铏氭嫙绉佹湁缃戠粶銆佸瓙缃戜笌瀹夊叏缁勮鍒欙紱
-2. Cloudflare 涓婅嚜鍔ㄧ敓鎴愮殑 7 鏉″瓙鍩熷悕 A 璁板綍瑙ｆ瀽銆?
-### 5.1 閿€姣侀伩鍧戜笌娉ㄦ剰浜嬮」
-1. **闃茶緭鍏ユ墜璇?*锛氭敞鎰忔嫾鍐欎负 `destroy`锛堝嬁鏁叉垚 `destory`锛夈€?2. **渚濊禆閲婃斁绔炴€佸鐞嗭紙閲嶈锛?*锛?   - 鑵捐浜?CVM 瀹炰緥閿€姣佸悗锛屽脊鎬х綉鍗★紙ENI锛夊湪浜戝簳灞傚瓨鍦?10~30 绉掔殑寮傛娉ㄩ攢寤惰繜銆?   - 鑻ラ亣鍒?`ResourceInUse.SubnetNotEmpty` 鎴?`SecurityGroupInUse`锛?*鍒囧嬁鎵嬪姩鍦ㄦ帶鍒跺彴寮哄垹**锛岄潤寰?20 绉掑悗鍐嶆鎵ц鍚屼竴鍛戒护 `terraform destroy -auto-approve`锛孴erraform 浼氳嚜鍔ㄨ繘琛屽閲忓箓绛夋竻鐞嗐€?3. **褰诲簳閲婃斁楠岃瘉鏂规硶**锛?   鎵ц `terraform plan`锛岃嫢杈撳嚭锛?   ```text
+该命令将全自动清理：
+1. 腾讯云上的 2 台 CVM 云服务器、2 套 VPC 虚拟私有网络、子网与安全组规则；
+2. Cloudflare 上自动生成的 7 条子域名 A 记录解析。
+
+### 5.1 销毁避坑与注意事项
+1. **防输入手误**：注意拼写为 `destroy`（勿敲成 `destory`）。
+2. **依赖释放竞态处理（重要）**：
+   - 腾讯云 CVM 实例销毁后，弹性网卡（ENI）在云底层存在 10~30 秒的异步注销延迟。
+   - 若遇到 `ResourceInUse.SubnetNotEmpty` 或 `SecurityGroupInUse`，**切勿手动在控制台强删**，静待 20 秒后再次执行同一命令 `terraform destroy -auto-approve`，Terraform 会自动进行增量幂等清理。
+3. **彻底释放验证方法**：
+   执行 `terraform plan`，若输出：
+   ```text
    Plan: 29 to add, 0 to change, 0 to destroy.
    ```
-   璇存槑浜戠鎵€鏈?29 涓璐?閰嶇疆璧勬簮宸?100% 褰诲簳娓呯┖锛屾棤浠讳綍鏆楁墸璐规畫鐣欍€?
+   说明云端所有 29 个计费/配置资源已 100% 彻底清空，无任何暗扣费残留。
+
 
 ---
 
-## 鍏€佷紒涓氱骇 CI/CD 涓?GitOps 鍏ㄩ摼璺墦閫氶獙鏀跺疄褰?
-鍏ㄥ浜戝師鐢?DevOps 娴佹按绾垮凡缁忓畬鏁磋窇閫氥€備互涓嬩负鍏ㄩ摼璺鍒扮闂幆楠岃瘉鐨勭湡瀹炴暟鎹笌鏍稿績璇佹嵁锛?
-### 6.1 Jenkins CI 鑷姩鍖栨祦姘寸嚎锛圔uild #7锛夋墽琛屾垚鏋?
-- **瑙﹀彂鏉ユ簮**锛欸itLab 婧愮爜浠撳簱 `main` 鍒嗘敮浠ｇ爜鎻愪氦锛圕ommit: `a8b9ba8`锛?- **鎬昏€楁椂**锛?40.7 绉掞紙绾?4 鍒嗛挓锛?- **鏋勫缓缁堟€?*锛歚SUCCESS`
+## 六、企业级 CI/CD 与 GitOps 全链路打通验收实录
 
-#### 闃舵鎵ц鏃跺簭涓庤€楁椂鏄庣粏琛?
-| 闃舵搴忓彿 | 娴佹按绾块樁娈靛悕绉?(Stage) | 鎵ц瀹瑰櫒 / 寮曟搸 | 鎵ц鐘舵€?| 鑰楁椂 (Duration) | 鏍稿績楠岃瘉鍐呭 |
+全套云原生 DevOps 流水线已经完整跑通。以下为全链路端到端闭环验证的真实数据与核心证据：
+
+### 6.1 Jenkins CI 自动化流水线（Build #7）执行成果
+
+- **触发来源**：GitLab 源码仓库 `main` 分支代码提交（Commit: `a8b9ba8`）
+- **总耗时**：240.7 秒（约 4 分钟）
+- **构建终态**：`SUCCESS`
+
+#### 阶段执行时序与耗时明细表
+
+| 阶段序号 | 流水线阶段名称 (Stage) | 执行容器 / 引擎 | 执行状态 | 耗时 (Duration) | 核心验证内容 |
 | :---: | :--- | :--- | :---: | :---: | :--- |
-| **Stage 1** | **Unit Test** | `golang:1.20-alpine` | **SUCCESS** | 41.1s | 鍗曞厓娴嬭瘯鍏ㄩ噺鎵ц锛屼唬鐮佽鐩栫巼妫€鏌ラ€氳繃 |
-| **Stage 2** | **Scan Code with Sonarqube** | `sonar-scanner` | **SUCCESS** | 71.8s | 闈欐€佷唬鐮佸垎鏋愪笌璐ㄩ噺闂ㄧ锛圦uality Gate: OK锛夐€氳繃 |
-| **Stage 3** | **Build with Kaniko** | `kaniko/executor` | **SUCCESS** | 86.7s | 鏃犻渶 Docker Daemon 瀹堟姢杩涚▼锛屽湪 K8s Pod 鍐呴儴瀹屾垚澶氶樁娈靛畨鍏ㄦ瀯寤猴紝杈撳嚭 `image.tar` |
-| **Stage 4** | **Scan Image with Grype** | `anchore/grype` | **SUCCESS** | 15.4s | 瀹瑰櫒闀滃儚 CVE 婕忔礊瀹夊叏鎵弿閫氳繃锛堟棤 Critical 绾у埆闃绘柇锛?|
-| **Stage 5** | **Crane Push Docker Image** | `crane/debug` | **SUCCESS** | 12.4s | 鍩轰簬 Google Crane 蹇€熷皢鏈湴 tar 闀滃儚鎺ㄩ€佸埌浼佷笟绾?Harbor 浠撳簱 |
-| **Stage 6** | **Cosign Image** | `sigstore/cosign` + `crane` | **SUCCESS** | 12.5s | 浣跨敤闈炲绉扮閽ュ畬鎴愬鍣ㄧ鍚嶏紝鑷姩鎵撲笂 `latest` 鏍囩锛屽苟灏嗙鍚嶉檮浠舵帹閫佸埌 Harbor |
+| **Stage 1** | **Unit Test** | `golang:1.20-alpine` | **SUCCESS** | 41.1s | 单元测试全量执行，代码覆盖率检查通过 |
+| **Stage 2** | **Scan Code with Sonarqube** | `sonar-scanner` | **SUCCESS** | 71.8s | 静态代码分析与质量门禁（Quality Gate: OK）通过 |
+| **Stage 3** | **Build with Kaniko** | `kaniko/executor` | **SUCCESS** | 86.7s | 无需 Docker Daemon 守护进程，在 K8s Pod 内部完成多阶段安全构建，输出 `image.tar` |
+| **Stage 4** | **Scan Image with Grype** | `anchore/grype` | **SUCCESS** | 15.4s | 容器镜像 CVE 漏洞安全扫描通过（无 Critical 级别阻断） |
+| **Stage 5** | **Crane Push Docker Image** | `crane/debug` | **SUCCESS** | 12.4s | 基于 Google Crane 快速将本地 tar 镜像推送到企业级 Harbor 仓库 |
+| **Stage 6** | **Cosign Image** | `sigstore/cosign` + `crane` | **SUCCESS** | 12.5s | 使用非对称私钥完成容器签名，自动打上 `latest` 标签，并将签名附件推送到 Harbor |
 
-#### Jenkins 娴佹按绾块樁娈佃鍥炬帶鍒跺彴鎽樿
+#### Jenkins 流水线阶段视图控制台摘要
 
 ```text
 Build ID: 7, Status: SUCCESS, Total Duration: 240.7s
@@ -668,8 +979,9 @@ Finished: SUCCESS
 [GitLab Pipeline Status] Notifying branch build status: SUCCESS build-go-example/main #7: This commit looks good.
 ```
 
-### 6.2 Harbor 闀滃儚鍒跺搧涓?Cosign 绛惧悕鐗╅獙璇?
-鍦?Harbor 椤圭洰 `example/camp-go-example` 涓紝鏂伴暅鍍忓強鍏舵暟瀛楃鍚嶅埗鍝佸凡琚畬鏁存崟鑾凤細
+### 6.2 Harbor 镜像制品与 Cosign 签名物验证
+
+在 Harbor 项目 `example/camp-go-example` 中，新镜像及其数字签名制品已被完整捕获：
 
 ```text
 Artifact ID: 6
@@ -679,9 +991,12 @@ Artifact ID: 6
   Type: IMAGE
 ```
 
-Harbor 骞冲彴鍘熺敓璇嗗埆鍒颁簡 `signature.cosign` 绛惧悕闄勪欢锛屽苟鎵撲笂闃茬鏀逛俊浠诲畨鍏ㄦ爣璇嗐€?
-### 6.3 Argo CD GitOps 鎸佺画浜や粯涓庡簲鐢ㄩ儴缃叉晥鏋?
-Argo CD ApplicationSet Controller 鑷姩妫€娴嬪埌 `camp-go-example-helm` 浠撳簱鐨?`dev` 涓?`main` 閰嶇疆锛屽畬鎴愪簡鍏ㄨ嚜鍔ㄦ媺鍙栦笌闆嗙兢璧勬簮鍙戝竷锛?
+Harbor 平台原生识别到了 `signature.cosign` 签名附件，并打上防篡改信任安全标识。
+
+### 6.3 Argo CD GitOps 持续交付与应用部署效果
+
+Argo CD ApplicationSet Controller 自动检测到 `camp-go-example-helm` 仓库的 `dev` 与 `main` 配置，完成了全自动拉取与集群资源发布：
+
 ```text
 NAME              AGE
 camp-go-example   ApplicationSet (Running)
@@ -691,7 +1006,7 @@ dev    Synced        Healthy
 main   Synced        Healthy
 ```
 
-鍦?Kubernetes 闆嗙兢鍛藉悕绌洪棿涓搴斾笟鍔℃湇鍔¤繍琛屽叏璨岋細
+在 Kubernetes 集群命名空间中对应业务服务运行全貌：
 
 ```text
 NAMESPACE   NAME                                  READY   STATUS    RESTARTS   AGE
@@ -700,15 +1015,19 @@ main        main-podinfo-c7544b76c-ttzvm          1/1     Running   0          5
 main        main-podinfo-redis-559c4fd877-g5cbp   1/1     Running   0          5m
 ```
 
-### 6.4 涓氬姟鏈嶅姟 HTTP 璁块棶绔埌绔獙鏀剁粨鏋?
-閫氳繃 Ingress Controller 楠岃瘉涓氬姟瀹為檯鍝嶅簲锛?
+### 6.4 业务服务 HTTP 访问端到端验收结果
+
+通过 Ingress Controller 验证业务实际响应：
+
 ```bash
-# 娴嬭瘯 Dev 寮€鍙戠幆澧?curl -s -H 'Host: dev.podinfo.local' http://127.0.0.1/
-# 娴嬭瘯 Main 鐢熶骇鐜
+# 测试 Dev 开发环境
+curl -s -H 'Host: dev.podinfo.local' http://127.0.0.1/
+# 测试 Main 生产环境
 curl -s -H 'Host: main.podinfo.local' http://127.0.0.1/
 ```
 
-杩斿洖瀹為檯 JSON 杞借嵎锛?```json
+返回实际 JSON 载荷：
+```json
 {
   "hostname": "main-podinfo-c7544b76c-ttzvm",
   "version": "6.3.6",
@@ -720,4 +1039,4 @@ curl -s -H 'Host: main.podinfo.local' http://127.0.0.1/
 }
 ```
 
-鑷虫锛屼簯鍘熺敓 DevOps 鍏ㄧ敓鍛藉懆鏈熼棴鐜嚜鍔ㄥ寲浣撶郴锛堝熀纭€璁炬柦浠ｇ爜鍖?IaC -> 鎸佺画闆嗘垚 CI -> 闀滃儚瀹夊叏渚涘簲閾?SecOps -> GitOps 鎸佺画浜や粯 CD锛夊叏閮ㄦ墦閫氾紝100% 楠屾敹閫氳繃锛?
+至此，云原生 DevOps 全生命周期闭环自动化体系（基础设施代码化 IaC -> 持续集成 CI -> 镜像安全供应链 SecOps -> GitOps 持续交付 CD）全部打通，100% 验收通过！

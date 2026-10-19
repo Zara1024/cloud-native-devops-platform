@@ -1,0 +1,24 @@
+﻿# 腾讯云 API 访问凭据 (推荐通过环境变量注入: TF_VAR_secret_id, TF_VAR_secret_key)
+secret_id  = "YOUR_TENCENTCLOUD_SECRET_ID"
+secret_key = "YOUR_TENCENTCLOUD_SECRET_KEY"
+
+# 地域与可用区
+region            = "ap-hongkong"
+availability_zone = "ap-hongkong-2"
+
+# 平台主域名与子域名前缀
+domain = "yourcompany.com"
+prefix = "ops"
+
+# 托管 PostgreSQL 参数
+pg_instance_type = "POSTGRES.S2.MEDIUM4" # 2核 4G 高可用双节点
+pg_storage_size  = 100
+pg_username      = "platform_admin"
+pg_password      = "REPLACE_WITH_STRONG_PASSWORD_32CHARS"
+
+# TKE 平台管控集群配置
+cluster_version = "1.28.3"
+node_spec = {
+  instance_type = "S6.2XLARGE16" # 8核 16G
+  node_count    = 3              # 3 节点跨可用区
+}

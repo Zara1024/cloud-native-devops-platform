@@ -1,0 +1,25 @@
+﻿# 腾讯云访问凭据 (推荐通过环境变量导出: export TF_VAR_secret_id="xxx")
+secret_id  = "YOUR_TENCENTCLOUD_SECRET_ID"
+secret_key = "YOUR_TENCENTCLOUD_SECRET_KEY"
+
+# Cloudflare API Token 与主域名配置
+cloudflare_api_key = "YOUR_CLOUDFLARE_API_KEY"
+domain             = "yourdomain.com"
+prefix             = "demo"
+
+# 地域与可用区 (默认腾讯云香港二区)
+region            = "ap-hongkong"
+availability_zone = "ap-hongkong-2"
+
+# 计费模式: SPOTPAID (竞价实例) 或 POSTPAID_BY_HOUR (按量计费)
+instance_charge_type = "SPOTPAID"
+
+# 平台服务默认密码 (建议修改为高强度密码)
+password         = "password123" # 节点 SSH 密码
+pg_password      = "password123" # PostgreSQL 密码
+grafana_password = "password123" # Grafana admin 密码
+jenkins_password = "password123" # Jenkins admin 密码
+sonar_password   = "password123" # SonarQube admin 密码
+harbor_password  = "Harbor12345" # Harbor admin 密码
+argocd_password  = "password123" # Argo CD admin 密码
+cosign_password  = "password123" # 镜像签名密码

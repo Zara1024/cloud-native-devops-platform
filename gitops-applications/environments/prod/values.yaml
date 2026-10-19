@@ -1,0 +1,24 @@
+﻿# 微服务生产环境部署配置
+image:
+  repository: harbor.demo.example.com/example/camp-go-example
+  tag: main-latest
+  pullPolicy: IfNotPresent
+
+replicaCount: 2
+
+resources:
+  requests:
+    cpu: 200m
+    memory: 256Mi
+  limits:
+    cpu: 1000m
+    memory: 1024Mi
+
+ingress:
+  enabled: true
+  className: gitlab-nginx
+  hosts:
+    - host: main.podinfo.local
+      paths:
+        - path: /
+          pathType: Prefix

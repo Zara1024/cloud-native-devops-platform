@@ -1,0 +1,23 @@
+﻿# 腾讯云 API 访问凭据
+secret_id  = "YOUR_TENCENTCLOUD_SECRET_ID"
+secret_key = "YOUR_TENCENTCLOUD_SECRET_KEY"
+
+region            = "ap-hongkong"
+availability_zone = "ap-hongkong-2"
+
+environment = "production"
+
+# TKE 生产集群核心节点池
+core_node_pool = {
+  instance_type = "S6.4XLARGE32" # 16核 32G
+  min_size      = 3
+  max_size      = 10
+}
+
+# 弹性构建与批处理节点池 (支持 Spot 竞价实例)
+spot_build_pool = {
+  instance_type = "S6.4XLARGE32"
+  min_size      = 0
+  max_size      = 20
+  enable_spot   = true
+}

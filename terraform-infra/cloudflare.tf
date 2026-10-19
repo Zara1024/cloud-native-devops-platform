@@ -68,3 +68,13 @@ resource "cloudflare_record" "prometheus" {
   ttl             = 60
   allow_overwrite = true
 }
+
+resource "cloudflare_record" "nexus" {
+  zone_id         = data.cloudflare_zone.this.id
+  name            = "nexus.${var.prefix}.${var.domain}"
+  value           = tencentcloud_instance.ubuntu[0].public_ip
+  type            = "A"
+  ttl             = 60
+  allow_overwrite = true
+}
+

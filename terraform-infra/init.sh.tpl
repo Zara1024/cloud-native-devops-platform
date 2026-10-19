@@ -1,10 +1,11 @@
-﻿#!/bin/bash
+#!/bin/bash
 set -o pipefail
 
 setup_hosts() {
     sudo sed -i '/${domain}/d' /etc/hosts 2>/dev/null || true
     echo "${public_ip} gitlab.${domain}" | sudo tee -a /etc/hosts
     echo "${public_ip} harbor.${domain}" | sudo tee -a /etc/hosts
+    echo "${public_ip} nexus.${domain}" | sudo tee -a /etc/hosts
     echo "${public_ip} jenkins.${domain}" | sudo tee -a /etc/hosts
     echo "${public_ip} sonar.${domain}" | sudo tee -a /etc/hosts
     echo "${public_ip} argocd.${domain}" | sudo tee -a /etc/hosts
@@ -15,24 +16,101 @@ setup_hosts() {
 setup_cli() {
     sudo wget -q https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -O /usr/bin/yq && sudo chmod +x /usr/bin/yq
     curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
-    # pgsql
+    # 安装 postgresql 客户端与 git
     sudo apt-get update -y
-    sudo apt-get -y install postgresql-client git || {
+    sudo apt-get -y install postgresql-client git nfs-common || {
         sudo install -d /etc/apt/keyrings
         curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo gpg --dearmor -o /etc/apt/keyrings/postgresql.gpg --yes
         echo "deb [signed-by=/etc/apt/keyrings/postgresql.gpg] http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" | sudo tee /etc/apt/sources.list.d/pgdg.list
         sudo apt-get update -y
-        sudo apt-get -y install postgresql-client git
+        sudo apt-get -y install postgresql-client git nfs-common
     }
     git config --global user.email "admin@${domain}"
     git config --global user.name "root"
 }
 
-wait_pg() {
-  until PGPASSWORD=${pg_password} psql -h ${pg_ip} -U k3s -d kubernetes -c '\q'; do
-    echo "Waiting for PostgreSQL"
-    sleep 1
-  done
+# 宿主机合设运行 PostgreSQL 14 并自动初始化 K3s 与 Harbor 双数据库
+setup_local_postgres() {
+    echo "=== [1/8] 初始化宿主机合设 PostgreSQL 数据库服务 ==="
+    # 确保宿主机安装 Docker
+    if ! command -v docker &> /dev/null; then
+        sudo NEEDRESTART_MODE=a apt-get update -y
+        sudo NEEDRESTART_MODE=a apt-get install -y ca-certificates curl gnupg
+        sudo install -m 0755 -d /etc/apt/keyrings
+        curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg --yes
+        sudo chmod a+r /etc/apt/keyrings/docker.gpg
+        echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+        sudo NEEDRESTART_MODE=a apt-get update -y
+        sudo NEEDRESTART_MODE=a apt-get install -y docker-ce docker-ce-cli containerd.io
+    fi
+
+    sudo mkdir -p /data/postgresql
+    if ! sudo docker ps | grep -q "local-postgres"; then
+        sudo docker run -d --name local-postgres \
+            --restart always \
+            -p 5432:5432 \
+            -v /data/postgresql:/var/lib/postgresql/data \
+            -e POSTGRES_PASSWORD="${pg_password}" \
+            postgres:14.2
+    fi
+
+    until PGPASSWORD="${pg_password}" psql -h 127.0.0.1 -U postgres -c '\q' 2>/dev/null; do
+        echo "等待宿主机 PostgreSQL 启动就绪..."
+        sleep 1
+    done
+
+    # 预建 K3s 底座库 (kubernetes) 与 Harbor 专属库 (registry)
+    PGPASSWORD="${pg_password}" psql -h 127.0.0.1 -U postgres << 'EOF'
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'k3s') THEN
+        CREATE USER k3s WITH ENCRYPTED PASSWORD '${pg_password}';
+    END IF;
+    IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'harbor') THEN
+        CREATE USER harbor WITH ENCRYPTED PASSWORD '${harbor_password}';
+    END IF;
+END
+$$;
+SELECT 'CREATE DATABASE kubernetes OWNER k3s' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'kubernetes')\gexec
+GRANT ALL PRIVILEGES ON DATABASE kubernetes TO k3s;
+SELECT 'CREATE DATABASE registry OWNER harbor' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'registry')\gexec
+GRANT ALL PRIVILEGES ON DATABASE registry TO harbor;
+EOF
+    echo "PostgreSQL 双库预初始化成功！"
+}
+
+# 部署腾讯云 CFS 驱动并自动注册支持 ReadWriteMany 的 StorageClass
+setup_cfs_storageclass() {
+    echo "=== [2/8] 部署腾讯云 CFS 驱动并注册 ReadWriteMany 存储类 (cfs-rwx) ==="
+    helm repo add nfs-subdir-external-provisioner https://kubernetes-sigs.github.io/nfs-subdir-external-provisioner/ || true
+    helm repo update
+
+    helm upgrade --install cfs-provisioner nfs-subdir-external-provisioner/nfs-subdir-external-provisioner \
+        --namespace kube-system \
+        --set nfs.server="${cfs_mount_ip}" \
+        --set nfs.path="/" \
+        --set storageClass.name="cfs-rwx" \
+        --set storageClass.provisionerName="tencentcloud.com/cfs" \
+        --set storageClass.accessModes="{ReadWriteMany}" \
+        --set storageClass.reclaimPolicy="Retain" \
+        --wait --timeout 5m || true
+
+    echo "腾讯云 CFS ReadWriteMany 存储类注册完毕！"
+}
+
+# 部署企业级内网 Nexus 制品库 (Maven / npm 私服与代理)
+setup_nexus() {
+    echo "=== [3/8] 部署内网 Nexus 3 制品库 (Maven / npm 代理加速) ==="
+    helm repo add sonatype https://sonatype.github.io/helm3-charts/ || true
+    helm repo update
+    kubectl create namespace nexus || true
+
+    helm upgrade --install nexus sonatype/nexus-repository-manager \
+        --namespace nexus \
+        -f /tmp/nexus-values.yaml \
+        --wait --timeout 10m || true
+
+    echo "Nexus 制品库部署完成！"
 }
 
 setup_k3s() {
@@ -275,8 +353,13 @@ setup_harbor() {
     
     # create cloudflare secret
     kubectl apply -f /tmp/cert-manager-cloudflare-secret.yaml -n harbor
-    # deploy harbor
-    helm upgrade --install harbor harbor/harbor -f /tmp/harbor-values.yaml --namespace harbor --create-namespace
+    # 部署 Harbor (优先采用官方 2.15.0 HA 模式)
+    if [ -f /tmp/harbor-ha-values.yaml ]; then
+        echo "=== [4/8] 采用 Harbor 官方 2.15.0 高可用模式 (HA) 进行部署 ==="
+        helm upgrade --install harbor harbor/harbor -f /tmp/harbor-ha-values.yaml --namespace harbor --create-namespace --wait --timeout 15m
+    else
+        helm upgrade --install harbor harbor/harbor -f /tmp/harbor-values.yaml --namespace harbor --create-namespace --wait --timeout 15m
+    fi
 
     # deploy harbor dashboard
     kubectl apply -f /tmp/harbor-dashboard.yaml -n harbor
@@ -517,9 +600,10 @@ output() {
     echo "Access Grafana: http://grafana.${domain}, admin, ${grafana_password}"
     echo "Access Prometheus: http://prometheus.${domain}"
     echo "Access GitLab: https://gitlab.${domain}, root, $gitlab_root_password, Access Token: $personal_access_token"
+    echo "Access Nexus (制品库): http://nexus.${domain}, admin, admin123"
     echo "Access Jenkins: http://jenkins.${domain}, admin, ${jenkins_password}"
     echo "Access Argo CD: http://argocd.${domain}, admin, ${argocd_password}"
-    echo "Access Harbor: https://harbor.${domain}, admin, ${harbor_password}"
+    echo "Access Harbor (HA): https://harbor.${domain}, admin, ${harbor_password}"
     echo "Access SonarQube: http://sonar.${domain}, admin, ${sonar_password}"
     echo "Example Application Dev Environment: dev.podinfo.local, Add hosts: ${public_ip} dev.podinfo.local"
     echo "Example Application Prod Environment: prod.podinfo.local, Add hosts: ${public_ip} main.podinfo.local"
@@ -529,14 +613,16 @@ output() {
 main() {
     setup_hosts
     setup_cli
-    wait_pg
-    setup_k3s
+    setup_local_postgres      # [1] 宿主机合设运行 PG 14 并自动预建双库
+    setup_k3s                 # [2] 安装 K3s 底座 (连接合设 PG)
+    setup_cfs_storageclass    # [3] 注册腾讯云 CFS ReadWriteMany 存储类
     setup_legacy_images
     setup_helm_repo
     setup_kube_prometheus_grafana_loki
+    setup_nexus               # [4] 部署内网 Nexus 3 制品库
     setup_gitlab
     setup_gitlab_project
-    setup_harbor
+    setup_harbor              # [5] 部署 Harbor 官方 2.15.0 HA 多副本集群
     setup_sonarqube
     setup_jenkins
     setup_argocd

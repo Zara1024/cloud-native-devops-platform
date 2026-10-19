@@ -1,11 +1,9 @@
-module "pg" {
-  source     = "./modules/pg-datastore"
-  secret_id  = var.secret_id
-  secret_key = var.secret_key
-}
-
+# 移除独立的 PG 虚拟机，改为单台主力主机宿主机合设运行 PostgreSQL 14，节约 50% 成本
 resource "null_resource" "connect_ubuntu" {
-  depends_on = [module.pg]
+  depends_on = [
+    tencentcloud_instance.ubuntu,
+    tencentcloud_cfs_file_system.harbor_cfs
+  ]
 
   connection {
     host     = tencentcloud_instance.ubuntu[0].public_ip
@@ -19,24 +17,25 @@ resource "null_resource" "connect_ubuntu" {
     instance_id = tencentcloud_instance.ubuntu[0].id
   }
 
-  // init.sh
+  // init.sh 部署引导脚本
   provisioner "file" {
     destination = "/tmp/init.sh"
     content = templatefile(
       "${path.module}/init.sh.tpl",
       {
-        "public_ip" : "${tencentcloud_instance.ubuntu[0].public_ip}"
+        "public_ip" : "${tencentcloud_instance.ubuntu[0].public_ip}",
         "domain" : "${var.prefix}.${var.domain}",
-        "gitlab_host" : "https://gitlab.${var.prefix}.${var.domain}"
-        "harbor_registry" : "${var.registry}"
-        "harbor_password" : "${var.harbor_password}"
-        "example_project_name" : "${var.example_project_name}"
-        "sonar_password" : "${var.sonar_password}"
-        "grafana_password" : "${var.grafana_password}"
-        "jenkins_password" : "${var.jenkins_password}"
-        "argocd_password" : "${var.argocd_password}"
-        "pg_ip" : "${module.pg.public_ip}"
-        "pg_password" : "${var.pg_password}"
+        "gitlab_host" : "https://gitlab.${var.prefix}.${var.domain}",
+        "harbor_registry" : "${var.registry}",
+        "harbor_password" : "${var.harbor_password}",
+        "example_project_name" : "${var.example_project_name}",
+        "sonar_password" : "${var.sonar_password}",
+        "grafana_password" : "${var.grafana_password}",
+        "jenkins_password" : "${var.jenkins_password}",
+        "argocd_password" : "${var.argocd_password}",
+        "pg_ip" : "${tencentcloud_instance.ubuntu[0].private_ip}",
+        "pg_password" : "${var.pg_password}",
+        "cfs_mount_ip" : "${tencentcloud_cfs_file_system.harbor_cfs.mount_ip}"
       }
     )
   }
@@ -194,6 +193,30 @@ resource "null_resource" "connect_ubuntu" {
     destination = "/tmp/harbor-values.yaml"
     content = templatefile(
       "${path.module}/../platform-manifests/harbor/values.yaml.tpl",
+      {
+        "domain" : "${var.prefix}.${var.domain}"
+      }
+    )
+  }
+
+  # harbor-ha (官方 2.15.0 高可用版 Helm values)
+  provisioner "file" {
+    destination = "/tmp/harbor-ha-values.yaml"
+    content = templatefile(
+      "${path.module}/../platform-manifests/harbor/values-ha.yaml.tpl",
+      {
+        "domain" : "${var.prefix}.${var.domain}",
+        "pg_ip" : "${tencentcloud_instance.ubuntu[0].private_ip}",
+        "harbor_password" : "${var.harbor_password}"
+      }
+    )
+  }
+
+  # nexus (内网制品库 Helm values)
+  provisioner "file" {
+    destination = "/tmp/nexus-values.yaml"
+    content = templatefile(
+      "${path.module}/../platform-manifests/nexus/values.yaml.tpl",
       {
         "domain" : "${var.prefix}.${var.domain}"
       }

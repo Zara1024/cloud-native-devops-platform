@@ -1,4 +1,4 @@
-﻿<div align="center">
+<div align="center">
 
 # 🚀 Cloud-Native DevOps & DevSecOps Platform
 
@@ -11,7 +11,7 @@
 [![DevSecOps](https://img.shields.io/badge/DevSecOps-SonarQube%20%7C%20Trivy%20%7C%20Cosign-4E9A06?style=flat-square)](#-二系统架构全景与业务交付链路)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg?style=flat-square)](LICENSE)
 
-[简体中文](./README.md) · [架构设计白皮书](./docs/architecture.md) · [实战排坑与排障手册](./docs/troubleshooting-guide.md) · [v0.0.1 发版日志](https://github.com/Zara1024/cloud-native-devops-platform/releases/tag/v0.0.1)
+[简体中文](./README.md) · [企业生产级架构演进指南](./docs/enterprise-architecture.md) · [架构设计白皮书](./docs/architecture.md) · [实战排坑与排障手册](./docs/troubleshooting-guide.md) · [v0.0.2 发版日志](https://github.com/Zara1024/cloud-native-devops-platform/releases/tag/v0.0.2)
 
 </div>
 
@@ -21,12 +21,14 @@
 
 在传统的 DevOps 落地实践中，团队常常面临 **工具链碎片化、环境配置冗长不一致、构建特权过大带来逃逸风险、镜像供应链缺乏防篡改保护、自动化部署链路黑盒** 等痛点。
 
-本项目基于工业界主流标准与安全规范打造，提供了一套生产可参考的一体化解决方案：
+本项目吸纳中国移动“磐舟”大型运营商生产规范，基于工业界主流标准与安全规范打造，提供了一套生产可参考的一体化解决方案：
 
 | 交付环节 | 传统自建模式的痛点 | 本项目的云原生解决方案 |
 | :--- | :--- | :--- |
-| **基础设施交付 (IaC)** | 手工控制台点选、脚本难以复现，极易产生环境漂移 | **Terraform 纯声明式编排**：计算、VPC、DNS、外置存储与 K8s 集群 15 分钟一键拉起 |
-| **容器运行时存储** | K3s 默认采用内置 SQLite，无法满足高并发生产可用性要求 | **外置解耦存储**：独立 PostgreSQL 实例承载集群元数据与平台业务库，故障隔离彻底 |
+| **基础设施交付 (IaC)** | 手工控制台点选、脚本难以复现，极易产生环境漂移 | **Terraform 纯声明式编排**：计算、VPC、DNS、CFS 共享存储与 K8s 集群 15 分钟一键拉起 |
+| **依赖与制品代理** | 依赖外网拉取 Maven/npm，易遭网络抖动或断供，无法离线构建 | **Nexus 3 企业级制品库**：内网代理并缓存公网依赖，支持私有 SDK 托管，加速构建 5~10 倍 |
+| **镜像仓库高可用 (HA)** | 单机单盘 Harbor，高并发并发读写时卡死或宕机瘫痪 | **Harbor 官方 2.15.0 HA 集群**：腾讯云 CFS 动态提供 `ReadWriteMany` 共享存储，多副本运行 |
+| **容器运行时与数据库存储** | 多开虚拟机浪费数千元成本；或使用内置 SQLite 易单点损坏 | **宿主机合设 PostgreSQL 14**：单台主力 CVM 自动预建双库持久化，节约 50% 服务器账单 |
 | **容器构建特权** | 挂载宿主机 Docker Socket（DooD），容器逃逸风险极高 | **无特权构建（Kaniko）**：在 Kubernetes Pod 用户空间直接构建镜像，杜绝特权逃逸 |
 | **代码与制品安全** | 缺乏统一门禁，CVE 漏洞在上线生产后才被动发现 | **CI 强门禁闭环**：SonarQube 质量门禁阻断 + Trivy 漏洞拦截 + Syft 生成 SBOM 软件物料清单 |
 | **镜像防篡改防投毒** | 镜像仓库无密码学鉴权，存在中间人劫持与篡改风险 | **数字签名与验签（Cosign）**：非对称私钥签名，Harbor 阻断未签名镜像入库与分发 |
